@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ExplorerApp } from "./App";
 import { bookmarkStorageKey } from "./lib/storage";
@@ -43,6 +43,10 @@ vi.mock("react-window", () => ({
     </div>
   ),
 }));
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("ExplorerApp", () => {
   it("does not auto-open a selected paper panel by default and formats the generated timestamp", () => {
@@ -89,6 +93,25 @@ describe("ExplorerApp", () => {
       }),
     ).not.toBeInTheDocument();
   });
+
+  it("waits to apply search text until typing stops or Enter is pressed", async () => {
+    render(<ExplorerApp data={fixturePayload} />);
+
+    const input = screen.getByRole("searchbox", { name: "Search papers" });
+    fireEvent.change(input, { target: { value: "zzzz" } });
+
+    expect(screen.queryByText("Try a broader filter combination.")).not.toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "trustworthy" } });
+    expect(screen.queryByText("Trustworthy Agents for Long-Horizon Planning")).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "zzzz" } });
+    expect(screen.queryByText("Try a broader filter combination.")).not.toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+
+    expect(screen.getByText("Try a broader filter combination.")).toBeInTheDocument();
+  });
+
   it("restores URL-driven filters and selected paper from the query string", () => {
     window.history.replaceState(
       {},
@@ -155,5 +178,18 @@ describe("ExplorerApp", () => {
 
     expect(screen.getByText("1 saved papers in your local plan.")).toBeInTheDocument();
     expect(screen.getByText("Trustworthy Agents for Long-Horizon Planning")).toBeInTheDocument();
+  });
+
+  it("opens agenda paper details in a modal without switching back to explore", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(bookmarkStorageKey(), JSON.stringify(["p1"]));
+
+    render(<ExplorerApp data={fixturePayload} />);
+    await user.click(screen.getByRole("tab", { name: "Agenda" }));
+    await user.click(screen.getByRole("button", { name: "View details" }));
+
+    expect(window.location.search).toContain("view=agenda");
+    expect(screen.getByRole("heading", { name: "Trustworthy Agents for Long-Horizon Planning", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Agenda" })).toHaveAttribute("aria-selected", "true");
   });
 });

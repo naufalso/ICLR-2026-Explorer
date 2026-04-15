@@ -1,7 +1,7 @@
 import {
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   startTransition,
-  useDeferredValue,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -27,6 +27,7 @@ const DEFAULT_FILTERS: Filters = {
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/papers.json`;
 const MOBILE_QUERY = "(max-width: 960px)";
+const SEARCH_COMMIT_DELAY_MS = 1500;
 
 type AppView = "explore" | "agenda";
 
@@ -117,12 +118,11 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
   const [selectedPaperId, setSelectedPaperId] = useState<string | null>(initialUrlState.paper);
   const [bookmarks, setBookmarks] = useState<Set<string>>(() => loadBookmarks());
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
-  const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(() => Boolean(initialUrlState.paper));
-  const [isDesktopDetailOpen, setIsDesktopDetailOpen] = useState(() => Boolean(initialUrlState.paper));
+  const [isDetailOpen, setIsDetailOpen] = useState(() => Boolean(initialUrlState.paper));
+  const [searchDraft, setSearchDraft] = useState(initialUrlState.filters.query);
   const [topicQuery, setTopicQuery] = useState("");
   const isMobile = useMediaQuery(MOBILE_QUERY);
   const viewportHeight = useViewportHeight();
-  const deferredQuery = useDeferredValue(filters.query);
 
   useEffect(() => {
     saveBookmarks(bookmarks);
@@ -133,8 +133,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     setView(nextState.view);
     setFilters(nextState.filters);
     setSelectedPaperId(nextState.paper);
-    setIsMobileDetailOpen(nextState.view === "explore" && Boolean(nextState.paper));
-    setIsDesktopDetailOpen(nextState.view === "explore" && Boolean(nextState.paper));
+    setIsDetailOpen(Boolean(nextState.paper));
     setIsMobileFiltersOpen(false);
   });
 
@@ -154,22 +153,37 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
   }, [filters, selectedPaperId, view]);
 
   useEffect(() => {
+    setSearchDraft(filters.query);
+  }, [filters.query]);
+
+  useEffect(() => {
+    if (searchDraft === filters.query) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      commitSearchQuery(searchDraft);
+    }, SEARCH_COMMIT_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [filters.query, searchDraft]);
+
+  useEffect(() => {
     if (!isMobile) {
       setIsMobileFiltersOpen(false);
-      setIsMobileDetailOpen(false);
     }
   }, [isMobile]);
 
   useEffect(() => {
     if (view !== "explore") {
       setIsMobileFiltersOpen(false);
-      setIsMobileDetailOpen(false);
-      setIsDesktopDetailOpen(false);
     }
   }, [view]);
 
   useEffect(() => {
-    if (!isMobile || !isMobileDetailOpen) {
+    if (!isDetailOpen) {
       return;
     }
     const previousOverflow = document.body.style.overflow;
@@ -177,34 +191,26 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [isMobile, isMobileDetailOpen]);
+  }, [isDetailOpen]);
 
   useEffect(() => {
-    if (!isMobileDetailOpen) {
+    if (!isDetailOpen) {
       return;
     }
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setIsMobileDetailOpen(false);
+        setIsDetailOpen(false);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isMobileDetailOpen]);
-
-  const effectiveFilters = useMemo(
-    () => ({
-      ...filters,
-      query: deferredQuery,
-    }),
-    [deferredQuery, filters],
-  );
+  }, [isDetailOpen]);
 
   const filteredPapers = useMemo(
-    () => filterPapers(data.papers, effectiveFilters, bookmarks),
-    [bookmarks, data.papers, effectiveFilters],
+    () => filterPapers(data.papers, filters, bookmarks),
+    [bookmarks, data.papers, filters],
   );
 
   const bookmarkedPapers = useMemo(
@@ -257,8 +263,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
   useEffect(() => {
     if (selectedPaperId && !data.papers.some((paper) => paper.paper_id === selectedPaperId)) {
       setSelectedPaperId(null);
-      setIsMobileDetailOpen(false);
-      setIsDesktopDetailOpen(false);
+      setIsDetailOpen(false);
     }
   }, [data.papers, selectedPaperId]);
 
@@ -269,13 +274,12 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
 
     if (filteredPapers.length === 0) {
       setSelectedPaperId(null);
-      setIsMobileDetailOpen(false);
-      setIsDesktopDetailOpen(false);
+      setIsDetailOpen(false);
       return;
     }
 
     if (!selectedPaperId) {
-      setIsDesktopDetailOpen(false);
+      setIsDetailOpen(false);
       return;
     }
 
@@ -285,9 +289,8 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     }
 
     setSelectedPaperId(null);
-    setIsMobileDetailOpen(false);
-    setIsDesktopDetailOpen(false);
-  }, [filteredPapers, isMobile, selectedPaperId, view]);
+    setIsDetailOpen(false);
+  }, [filteredPapers, selectedPaperId, view]);
 
   function updateFilters(nextValue: Partial<Filters>) {
     startTransition(() => {
@@ -298,12 +301,23 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     });
   }
 
+  function commitSearchQuery(nextQuery: string) {
+    updateFilters({ query: nextQuery });
+  }
+
+  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    commitSearchQuery(searchDraft);
+  }
+
   function handleViewChange(nextView: AppView) {
     setView(nextView);
+    setIsDetailOpen(false);
     if (nextView !== "explore") {
       setIsMobileFiltersOpen(false);
-      setIsMobileDetailOpen(false);
-      setIsDesktopDetailOpen(false);
     }
   }
 
@@ -359,17 +373,11 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
 
   function openPaper(paperId: string) {
     setSelectedPaperId(paperId);
-    if (view !== "explore") {
-      setView("explore");
-    }
-    if (isMobile) {
-      setIsMobileDetailOpen(true);
-      return;
-    }
-    setIsDesktopDetailOpen(true);
+    setIsDetailOpen(true);
   }
 
   function resetFilters() {
+    setSearchDraft(DEFAULT_FILTERS.query);
     setFilters(DEFAULT_FILTERS);
   }
 
@@ -453,8 +461,9 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
               aria-label="Search papers"
               name="q"
               autoComplete="off"
-              value={filters.query}
-              onChange={(event) => updateFilters({ query: event.target.value })}
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
               placeholder="Reasoning, multimodal, safety…"
             />
           </label>
@@ -725,7 +734,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
                           onClick={() => openPaper(paper.paper_id)}
                           type="button"
                         >
-                          Open in Explore
+                          View details
                         </button>
                       </article>
                     ))}
@@ -753,7 +762,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
                           onClick={() => openPaper(paper.paper_id)}
                           type="button"
                         >
-                          Open in Explore
+                          View details
                         </button>
                       </article>
                     ))}
@@ -766,23 +775,23 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
       )}
 
 
-      {!isMobile && view === "explore" && selectedPaper && isDesktopDetailOpen ? (
+      {selectedPaper && isDetailOpen ? (
         <div
-          className="desktop-detail-backdrop"
-          onClick={() => setIsDesktopDetailOpen(false)}
+          className="detail-modal-backdrop"
+          onClick={() => setIsDetailOpen(false)}
           role="presentation"
         >
           <aside
-            className="desktop-detail-drawer"
-            onClick={(event) => event.stopPropagation()}
+            className="detail-modal"
             role="dialog"
             aria-modal="true"
             aria-label={formatPaperTitle(selectedPaper.title)}
+            onClick={(event) => event.stopPropagation()}
           >
-            <div className="desktop-sheet-header">
+            <div className="detail-modal-header">
               <button
                 className="ghost-button close-button"
-                onClick={() => setIsDesktopDetailOpen(false)}
+                onClick={() => setIsDetailOpen(false)}
                 type="button"
               >
                 Close
@@ -790,33 +799,6 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
             </div>
             <PaperDetail paper={selectedPaper} />
           </aside>
-        </div>
-      ) : null}
-
-      {isMobile && view === "explore" && selectedPaper && isMobileDetailOpen ? (
-        <div
-          className="mobile-sheet-backdrop"
-          onClick={() => setIsMobileDetailOpen(false)}
-          role="presentation"
-        >
-          <section
-            className="mobile-detail-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label={formatPaperTitle(selectedPaper.title)}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mobile-sheet-header">
-              <button
-                className="ghost-button close-button"
-                onClick={() => setIsMobileDetailOpen(false)}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
-            <PaperDetail paper={selectedPaper} />
-          </section>
         </div>
       ) : null}
     </main>

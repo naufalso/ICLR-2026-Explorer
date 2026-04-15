@@ -120,7 +120,7 @@ code {
 .detail-panel,
 .agenda-layout,
 .loading-card,
-.mobile-detail-sheet {
+.detail-modal {
   position: relative;
   background: var(--paper);
   backdrop-filter: blur(14px);
@@ -152,7 +152,7 @@ code {
 .results-toolbar h2,
 .agenda-toolbar h2,
 .detail-panel h2,
-.mobile-sheet-header h2,
+.detail-modal h2,
 .empty-state h3 {
   margin: 0;
   font-family: "Space Grotesk", sans-serif;
@@ -402,7 +402,7 @@ select:focus-visible,
 .bulk-actions,
 .detail-links,
 .filter-row,
-.mobile-sheet-header {
+.detail-modal-header {
   display: flex;
   gap: 10px;
   align-items: start;
@@ -412,7 +412,7 @@ select:focus-visible,
 .filters-header h2,
 .filters-header h3,
 .agenda-day-header h3,
-.mobile-sheet-header h2 {
+.detail-modal h2 {
   margin: 0;
 }
 
@@ -510,7 +510,7 @@ select:focus-visible,
 .results-toolbar h2,
 .agenda-toolbar h2,
 .detail-panel h2,
-.mobile-sheet-header h2 {
+.detail-modal h2 {
   font-size: clamp(1.55rem, 2vw, 2.15rem);
 }
 
@@ -748,61 +748,39 @@ select:focus-visible,
 }
 
 
-.desktop-detail-backdrop {
+.detail-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 28;
-  background: rgba(20, 20, 18, 0.28);
+  z-index: 30;
+  background: rgba(20, 20, 18, 0.4);
   display: flex;
-  justify-content: flex-end;
-  padding: 16px;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
 }
 
-.desktop-detail-drawer {
-  width: min(560px, calc(100vw - 24px));
-  height: calc(100vh - 32px);
+.detail-modal {
+  width: min(920px, calc(100vw - 48px));
+  max-height: min(88vh, 980px);
   overflow: auto;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow);
-  padding: 18px;
-}
-
-.desktop-sheet-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.mobile-sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  background: rgba(24, 23, 20, 0.36);
-  display: flex;
-  justify-content: center;
-  align-items: end;
-  padding: 24px 12px calc(12px + env(safe-area-inset-bottom));
-}
-
-.mobile-detail-sheet {
-  width: min(760px, 100%);
-  max-height: min(85vh, 920px);
-  overflow: auto;
-  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
-  border-radius: 28px 28px 20px 20px;
+  padding: 24px;
   overscroll-behavior: contain;
 }
 
-.mobile-sheet-header {
+.detail-modal-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 16px;
   position: sticky;
   top: 0;
   z-index: 1;
   padding-bottom: 14px;
-  margin-bottom: 16px;
-  background: linear-gradient(to bottom, rgba(255, 252, 246, 0.98), rgba(255, 252, 246, 0.9));
+  background: linear-gradient(to bottom, rgba(255, 252, 246, 0.98), rgba(255, 252, 246, 0.92));
 }
 
 .close-button {
@@ -900,7 +878,13 @@ select:focus-visible,
     font-size: 1.65rem;
   }
 
-  .mobile-detail-sheet {
-    padding-inline: 16px;
+  .detail-modal-backdrop {
+    padding: 16px;
+  }
+
+  .detail-modal {
+    width: min(100%, calc(100vw - 20px));
+    max-height: min(92vh, 980px);
+    padding: 18px;
   }
 }
