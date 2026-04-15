@@ -1,4 +1,6 @@
 const INLINE_MATH_PATTERN = /\$\$?([^$]+?)\$\$?/g;
+const FORMAT_COMMAND_PATTERN =
+  /\\(?:mathbf|mathrm|mathit|mathsf|mathcal|mathbb|mathfrak|boldsymbol|operatorname|text|textrm|textbf|textit|textnormal|textsc|emph|underline)\{([^{}]+)\}/g;
 
 const GREEK_MAP: Record<string, string> = {
   alpha: "α",
@@ -36,6 +38,43 @@ const GREEK_MAP: Record<string, string> = {
   Omega: "Ω",
 };
 
+const COMMAND_SYMBOL_MAP: Record<string, string> = {
+  approx: "≈",
+  cdot: "·",
+  delta: "δ",
+  ell: "ℓ",
+  epsilon: "ϵ",
+  eta: "η",
+  gamma: "γ",
+  geq: "≥",
+  in: "∈",
+  infty: "∞",
+  lambda: "λ",
+  leq: "≤",
+  log: "log",
+  max: "max",
+  min: "min",
+  mu: "μ",
+  nu: "ν",
+  omega: "ω",
+  partial: "∂",
+  pi: "π",
+  rightarrow: "→",
+  sigma: "σ",
+  sim: "∼",
+  sqrt: "√",
+  sum: "Σ",
+  tau: "τ",
+  theta: "θ",
+  tilde: "~",
+  times: "×",
+  to: "→",
+  varepsilon: "ε",
+  widetilde: "~",
+  zeta: "ζ",
+  ...GREEK_MAP,
+};
+
 const SUPERSCRIPT_MAP: Record<string, string> = {
   0: "⁰",
   1: "¹",
@@ -52,6 +91,7 @@ const SUPERSCRIPT_MAP: Record<string, string> = {
   "=": "⁼",
   "(": "⁽",
   ")": "⁾",
+  "∞": "∞",
   n: "ⁿ",
   i: "ⁱ",
 };
@@ -98,21 +138,53 @@ export function formatPaperTitle(title: string): string {
     .trim();
 }
 
+export function formatPaperAbstract(abstract: string): string {
+  let normalized = abstract
+    .replace(INLINE_MATH_PATTERN, (_match, inlineMath) => normalizeInlineMath(inlineMath))
+    .replace(/\\href\{[^{}]*\}\{([^{}]+)\}/g, "$1")
+    .replace(/\\url\{([^{}]+)\}/g, "$1")
+    .replace(/\\cite[a-zA-Z]*\{[^{}]*\}/g, "")
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2")
+    .replace(/\\sqrt\{([^{}]+)\}/g, "√($1)")
+    .replace(/\\([A-Za-z]+)\{\}/g, (_match, command) => COMMAND_SYMBOL_MAP[command] ?? command);
+
+  while (FORMAT_COMMAND_PATTERN.test(normalized)) {
+    FORMAT_COMMAND_PATTERN.lastIndex = 0;
+    normalized = normalized.replace(FORMAT_COMMAND_PATTERN, "$1");
+  }
+
+  return normalized
+    .replace(/\\([#$%&_{}])/g, "$1")
+    .replace(/\\([A-Za-z]+)\{([^{}]+)\}/g, (_match, command, content) => {
+      if (command === "tilde" || command === "widetilde") {
+        return `${content}~`;
+      }
+      return content || (COMMAND_SYMBOL_MAP[command] ?? command);
+    })
+    .replace(/\\([A-Za-z]+)\b/g, (_match, command) => COMMAND_SYMBOL_MAP[command] ?? command)
+    .replace(/\*\*_([^*_]+)_\*\*/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/[{}]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s([,.;:)])/g, "$1")
+    .replace(/[(]\s+/g, "(")
+    .trim();
+}
+
 function normalizeInlineMath(value: string): string {
   let normalized = value.trim();
 
-  const wrapperPattern =
-    /\\(?:mathbf|mathrm|mathit|mathsf|mathcal|mathbb|boldsymbol|operatorname|text|textrm|textbf)\{([^{}]+)\}/g;
-
-  while (wrapperPattern.test(normalized)) {
-    wrapperPattern.lastIndex = 0;
-    normalized = normalized.replace(wrapperPattern, "$1");
+  while (FORMAT_COMMAND_PATTERN.test(normalized)) {
+    FORMAT_COMMAND_PATTERN.lastIndex = 0;
+    normalized = normalized.replace(FORMAT_COMMAND_PATTERN, "$1");
   }
 
   normalized = normalized
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2")
+    .replace(/\\sqrt\{([^{}]+)\}/g, "√($1)")
     .replace(/\\([#$%&_{}])/g, "$1")
-    .replace(/\\([A-Za-z]+)\b/g, (_match, command) => GREEK_MAP[command] ?? command)
-    .replace(/\^\{([^{}]+)\}|\^([A-Za-z0-9+\-=()])/g, (_match, braced, bare) =>
+    .replace(/\\([A-Za-z]+)\b/g, (_match, command) => COMMAND_SYMBOL_MAP[command] ?? command)
+    .replace(/\^\{([^{}]+)\}|\^([A-Za-z0-9+\-=()∞])/g, (_match, braced, bare) =>
       translateScript(braced ?? bare, SUPERSCRIPT_MAP),
     )
     .replace(/_\{([^{}]+)\}|_([A-Za-z0-9+\-=()])/g, (_match, braced, bare) =>

@@ -13,7 +13,7 @@ import { List, type RowComponentProps } from "react-window";
 import { buildCsv, buildIcs, downloadTextFile } from "./lib/export";
 import { filterPapers, formatDateLabel, formatScheduleLabel, groupAgenda } from "./lib/filters";
 import { bookmarkStorageKey, loadBookmarks, saveBookmarks } from "./lib/storage";
-import { formatPaperTitle } from "./lib/title";
+import { formatPaperAbstract, formatPaperTitle } from "./lib/title";
 import type { Filters, Paper, PapersPayload } from "./types";
 
 const DEFAULT_FILTERS: Filters = {
@@ -26,6 +26,7 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/papers.json`;
+const ICLR_LOGO_URL = "https://iclr.cc/static/core/img/iclr-navbar-logo.svg";
 const MOBILE_QUERY = "(max-width: 960px)";
 const SEARCH_COMMIT_DELAY_MS = 1500;
 
@@ -406,8 +407,21 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
       <header className="command-header">
         <div className="command-header-top">
           <div className="brand-block">
-            <p className="eyebrow">ICLR 2026 conference explorer</p>
-            <h1>Scan papers, plan sessions.</h1>
+            <div className="brand-lockup">
+              <img
+                className="iclr-logo"
+                src={ICLR_LOGO_URL}
+                alt="ICLR - International Conference on Learning Representations"
+              />
+              <div className="brand-title">
+                <p className="eyebrow">Conference Program Explorer</p>
+                <h1>ICLR 2026 Conference Explorer</h1>
+                <p className="command-copy">
+                  Search the full ICLR 2026 program, pin the papers that matter, and build a clean
+                  local agenda without wrestling with the conference site.
+                </p>
+              </div>
+            </div>
           </div>
 
           <dl className="stat-strip">
@@ -425,11 +439,6 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
             </div>
           </dl>
         </div>
-
-        <p className="command-copy">
-          Search the full program, pin the papers that matter, and build a clean local agenda
-          without wrestling with the conference site.
-        </p>
 
         <div className="command-bar">
           <div className="toolbar-tabs" role="tablist" aria-label="Primary views">
@@ -774,6 +783,37 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
         </section>
       )}
 
+      <footer className="app-footer" aria-label="Project links">
+        <div className="footer-brand">
+          <p className="eyebrow">Project</p>
+          <h2>ICLR 2026 Conference Explorer</h2>
+          <p>
+            An independent interface for browsing the ICLR 2026 program, reviewing papers, and
+            building a personal conference agenda.
+          </p>
+        </div>
+
+        <div className="footer-actions">
+          <a
+            className="footer-link-card"
+            href="https://github.com/naufalso/ICLR-2026-Explorer"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span>Source Code</span>
+            <strong>View Repository</strong>
+          </a>
+          <a
+            className="footer-link-card"
+            href="https://github.com/naufalso"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span>Maintainer</span>
+            <strong>@naufalso</strong>
+          </a>
+        </div>
+      </footer>
 
       {selectedPaper && isDetailOpen ? (
         <div
@@ -788,15 +828,13 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
             aria-label={formatPaperTitle(selectedPaper.title)}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="detail-modal-header">
-              <button
-                className="ghost-button close-button"
-                onClick={() => setIsDetailOpen(false)}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
+            <button
+              className="ghost-button close-button"
+              onClick={() => setIsDetailOpen(false)}
+              type="button"
+            >
+              Close
+            </button>
             <PaperDetail paper={selectedPaper} />
           </aside>
         </div>
@@ -924,7 +962,7 @@ function PaperDetail({ paper }: { paper: Paper }) {
 
       <section className="detail-abstract">
         <h3>Abstract</h3>
-        <p>{paper.abstract || "Abstract unavailable."}</p>
+        <p>{paper.abstract ? formatPaperAbstract(paper.abstract) : "Abstract unavailable."}</p>
       </section>
     </div>
   );
