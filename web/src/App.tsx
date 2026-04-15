@@ -1,15 +1,19 @@
 import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   startTransition,
-  useDeferredValue,
   useEffect,
   useEffectEvent,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { List, type RowComponentProps } from "react-window";
 
 import { buildCsv, buildIcs, downloadTextFile } from "./lib/export";
 import { filterPapers, formatDateLabel, formatScheduleLabel, groupAgenda } from "./lib/filters";
 import { bookmarkStorageKey, loadBookmarks, saveBookmarks } from "./lib/storage";
+import { formatPaperTitle } from "./lib/title";
 import type { Filters, Paper, PapersPayload } from "./types";
 
 const DEFAULT_FILTERS: Filters = {
@@ -22,8 +26,24 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/papers.json`;
+const MOBILE_QUERY = "(max-width: 960px)";
+const SEARCH_COMMIT_DELAY_MS = 1500;
 
 type AppView = "explore" | "agenda";
+
+interface ExplorerUrlState {
+  view: AppView;
+  paper: string | null;
+  filters: Filters;
+}
+
+interface PaperListRowData {
+  bookmarks: Set<string>;
+  onOpen: (paperId: string) => void;
+  onToggleBookmark: (paperId: string) => void;
+  papers: Paper[];
+  selectedPaperId: string | null;
+}
 
 export function App() {
   const [data, setData] = useState<PapersPayload | null>(null);
@@ -59,10 +79,13 @@ export function App() {
     return (
       <main className="loading-shell">
         <section className="loading-card">
-          <p className="eyebrow">Data load failed</p>
+          <p className="eyebrow">Data Load Failed</p>
           <h1>ICLR 2026 Explorer</h1>
           <p>{error}</p>
-          <p>Run <code>uv run python -m iclr_explorer.build_web_data</code> before starting the web app.</p>
+          <p>
+            Run <code>uv run python -m iclr_explorer.build_web_data</code> before starting the web
+            app.
+          </p>
         </section>
       </main>
     );
@@ -72,9 +95,9 @@ export function App() {
     return (
       <main className="loading-shell">
         <section className="loading-card">
-          <p className="eyebrow">Loading conference data</p>
+          <p className="eyebrow">Loading Conference Data</p>
           <h1>ICLR 2026 Explorer</h1>
-          <p>Preparing {bookmarkStorageKey()} and the local paper wallplanner.</p>
+          <p>Preparing {bookmarkStorageKey()} and your local conference workspace…</p>
         </section>
       </main>
     );
@@ -84,59 +107,110 @@ export function App() {
 }
 
 export function ExplorerApp({ data }: { data: PapersPayload }) {
-  const [view, setView] = useState<AppView>("explore");
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [selectedPaperId, setSelectedPaperId] = useState<string | null>(() => readSelectedPaperId());
-  const [bookmarks, setBookmarks] = useState<Set<string>>(() => loadBookmarks());
+  const initialUrlStateRef = useRef<ExplorerUrlState | null>(null);
+  if (!initialUrlStateRef.current) {
+    initialUrlStateRef.current = readExplorerUrlState();
+  }
 
-  const deferredQuery = useDeferredValue(filters.query);
+  const initialUrlState = initialUrlStateRef.current;
+  const [view, setView] = useState<AppView>(initialUrlState.view);
+  const [filters, setFilters] = useState<Filters>(initialUrlState.filters);
+  const [selectedPaperId, setSelectedPaperId] = useState<string | null>(initialUrlState.paper);
+  const [bookmarks, setBookmarks] = useState<Set<string>>(() => loadBookmarks());
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(() => Boolean(initialUrlState.paper));
+  const [searchDraft, setSearchDraft] = useState(initialUrlState.filters.query);
+  const [topicQuery, setTopicQuery] = useState("");
+  const isMobile = useMediaQuery(MOBILE_QUERY);
+  const viewportHeight = useViewportHeight();
 
   useEffect(() => {
     saveBookmarks(bookmarks);
   }, [bookmarks]);
 
-  const syncSelectedPaperInUrl = useEffectEvent((paperId: string | null) => {
-    const url = new URL(window.location.href);
-    if (paperId) {
-      url.searchParams.set("paper", paperId);
-    } else {
-      url.searchParams.delete("paper");
-    }
-    window.history.replaceState({}, "", url);
-  });
-
-  const handlePopState = useEffectEvent(() => {
-    setSelectedPaperId(readSelectedPaperId());
+  const restoreUrlState = useEffectEvent(() => {
+    const nextState = readExplorerUrlState();
+    setView(nextState.view);
+    setFilters(nextState.filters);
+    setSelectedPaperId(nextState.paper);
+    setIsDetailOpen(Boolean(nextState.paper));
+    setIsMobileFiltersOpen(false);
   });
 
   useEffect(() => {
-    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("popstate", restoreUrlState);
     return () => {
-      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("popstate", restoreUrlState);
     };
-  }, [handlePopState]);
+  }, [restoreUrlState]);
 
   useEffect(() => {
-    syncSelectedPaperInUrl(selectedPaperId);
-  }, [selectedPaperId, syncSelectedPaperInUrl]);
+    writeExplorerUrlState({
+      view,
+      paper: selectedPaperId,
+      filters,
+    });
+  }, [filters, selectedPaperId, view]);
 
   useEffect(() => {
-    if (selectedPaperId && !data.papers.some((paper) => paper.paper_id === selectedPaperId)) {
-      setSelectedPaperId(null);
+    setSearchDraft(filters.query);
+  }, [filters.query]);
+
+  useEffect(() => {
+    if (searchDraft === filters.query) {
+      return;
     }
-  }, [data.papers, selectedPaperId]);
 
-  const effectiveFilters = useMemo(
-    () => ({
-      ...filters,
-      query: deferredQuery,
-    }),
-    [deferredQuery, filters],
-  );
+    const timeoutId = window.setTimeout(() => {
+      commitSearchQuery(searchDraft);
+    }, SEARCH_COMMIT_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [filters.query, searchDraft]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setIsMobileFiltersOpen(false);
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (view !== "explore") {
+      setIsMobileFiltersOpen(false);
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (!isDetailOpen) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isDetailOpen]);
+
+  useEffect(() => {
+    if (!isDetailOpen) {
+      return;
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsDetailOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isDetailOpen]);
 
   const filteredPapers = useMemo(
-    () => filterPapers(data.papers, effectiveFilters, bookmarks),
-    [bookmarks, data.papers, effectiveFilters],
+    () => filterPapers(data.papers, filters, bookmarks),
+    [bookmarks, data.papers, filters],
   );
 
   const bookmarkedPapers = useMemo(
@@ -155,6 +229,97 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     () => filteredPapers.filter((paper) => bookmarks.has(paper.paper_id)).length,
     [bookmarks, filteredPapers],
   );
+
+  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
+  const generatedLabel = useMemo(() => formatGeneratedLabel(data.generated_at), [data.generated_at]);
+  const skippedAgendaCount = useMemo(() => buildIcs(bookmarkedPapers).skippedCount, [bookmarkedPapers]);
+  const visibleTopicTags = useMemo(() => {
+    const query = topicQuery.trim().toLowerCase();
+    if (!query) {
+      return data.topic_tags;
+    }
+    return data.topic_tags.filter((topic) => formatTopicLabel(topic).toLowerCase().includes(query));
+  }, [data.topic_tags, topicQuery]);
+  const resultsListHeight = useMemo(
+    () =>
+      Math.max(
+        isMobile ? 460 : 620,
+        Math.min(Math.round(viewportHeight * (isMobile ? 0.72 : 0.8)), isMobile ? 860 : 1400),
+      ),
+    [isMobile, viewportHeight],
+  );
+  const resultsItemSize = isMobile ? 252 : 238;
+  const paperListRowData = useMemo<PaperListRowData>(
+    () => ({
+      bookmarks,
+      onOpen: openPaper,
+      onToggleBookmark: toggleBookmark,
+      papers: filteredPapers,
+      selectedPaperId,
+    }),
+    [bookmarks, filteredPapers, selectedPaperId],
+  );
+
+  useEffect(() => {
+    if (selectedPaperId && !data.papers.some((paper) => paper.paper_id === selectedPaperId)) {
+      setSelectedPaperId(null);
+      setIsDetailOpen(false);
+    }
+  }, [data.papers, selectedPaperId]);
+
+  useEffect(() => {
+    if (view !== "explore") {
+      return;
+    }
+
+    if (filteredPapers.length === 0) {
+      setSelectedPaperId(null);
+      setIsDetailOpen(false);
+      return;
+    }
+
+    if (!selectedPaperId) {
+      setIsDetailOpen(false);
+      return;
+    }
+
+    const selectedStillVisible = filteredPapers.some((paper) => paper.paper_id === selectedPaperId);
+    if (selectedStillVisible) {
+      return;
+    }
+
+    setSelectedPaperId(null);
+    setIsDetailOpen(false);
+  }, [filteredPapers, selectedPaperId, view]);
+
+  function updateFilters(nextValue: Partial<Filters>) {
+    startTransition(() => {
+      setFilters((current) => ({
+        ...current,
+        ...nextValue,
+      }));
+    });
+  }
+
+  function commitSearchQuery(nextQuery: string) {
+    updateFilters({ query: nextQuery });
+  }
+
+  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    commitSearchQuery(searchDraft);
+  }
+
+  function handleViewChange(nextView: AppView) {
+    setView(nextView);
+    setIsDetailOpen(false);
+    if (nextView !== "explore") {
+      setIsMobileFiltersOpen(false);
+    }
+  }
 
   function toggleTopic(topic: string) {
     setFilters((current) => {
@@ -206,6 +371,16 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     });
   }
 
+  function openPaper(paperId: string) {
+    setSelectedPaperId(paperId);
+    setIsDetailOpen(true);
+  }
+
+  function resetFilters() {
+    setSearchDraft(DEFAULT_FILTERS.query);
+    setFilters(DEFAULT_FILTERS);
+  }
+
   function exportBookmarksCsv() {
     const content = buildCsv(data.columns, bookmarkedPapers);
     downloadTextFile("iclr-2026-bookmarks.csv", content, "text/csv;charset=utf-8");
@@ -216,295 +391,291 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     downloadTextFile("iclr-2026-bookmarks.ics", content, "text/calendar;charset=utf-8");
   }
 
-  const { skippedCount } = buildIcs(bookmarkedPapers);
+  const headerContextLabel =
+    view === "explore"
+      ? `${filteredPapers.length.toLocaleString()} papers in the current lens`
+      : `${bookmarkedPapers.length.toLocaleString()} saved papers in your local plan`;
 
   return (
     <main className="app-shell">
+      <a className="skip-link" href="#results-panel">
+        Skip to Results
+      </a>
       <div className="backdrop-grid" />
-      <header className="masthead">
-        <div className="masthead-copy">
-          <p className="eyebrow">ICLR 2026 field planner</p>
-          <h1>Navigate the conference like a wall of annotated session cards.</h1>
-          <p className="masthead-text">
-            Search 5,472 papers, pin the ones that matter, and turn them into a day-by-day agenda
-            without wrestling with the official site.
-          </p>
+
+      <header className="command-header">
+        <div className="command-header-top">
+          <div className="brand-block">
+            <p className="eyebrow">ICLR 2026 conference explorer</p>
+            <h1>Scan papers, plan sessions.</h1>
+          </div>
+
+          <dl className="stat-strip">
+            <div className="stat-pill">
+              <dt>Papers</dt>
+              <dd>{data.total_papers.toLocaleString()}</dd>
+            </div>
+            <div className="stat-pill">
+              <dt>Scheduled</dt>
+              <dd>{(data.total_papers - data.unresolved_schedule_count).toLocaleString()}</dd>
+            </div>
+            <div className="stat-pill">
+              <dt>Saved</dt>
+              <dd>{bookmarks.size.toLocaleString()}</dd>
+            </div>
+          </dl>
         </div>
-        <dl className="stat-board">
-          <div>
-            <dt>Papers</dt>
-            <dd>{data.total_papers.toLocaleString()}</dd>
+
+        <p className="command-copy">
+          Search the full program, pin the papers that matter, and build a clean local agenda
+          without wrestling with the conference site.
+        </p>
+
+        <div className="command-bar">
+          <div className="toolbar-tabs" role="tablist" aria-label="Primary views">
+            <button
+              className={view === "explore" ? "tab is-active" : "tab"}
+              onClick={() => handleViewChange("explore")}
+              role="tab"
+              aria-selected={view === "explore"}
+              type="button"
+            >
+              Explore
+            </button>
+            <button
+              className={view === "agenda" ? "tab is-active" : "tab"}
+              onClick={() => handleViewChange("agenda")}
+              role="tab"
+              aria-selected={view === "agenda"}
+              type="button"
+            >
+              Agenda
+            </button>
           </div>
-          <div>
-            <dt>Scheduled</dt>
-            <dd>{(data.total_papers - data.unresolved_schedule_count).toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>Bookmarks</dt>
-            <dd>{bookmarks.size.toLocaleString()}</dd>
-          </div>
-        </dl>
+
+          <label className="search-shell">
+            <span className="search-label">Primary Search</span>
+            <input
+              className="search-input"
+              type="search"
+              aria-label="Search papers"
+              name="q"
+              autoComplete="off"
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Reasoning, multimodal, safety…"
+            />
+          </label>
+
+          {view === "explore" && isMobile ? (
+            <button
+              className="ghost-button filter-disclosure"
+              onClick={() => setIsMobileFiltersOpen((current) => !current)}
+              type="button"
+            >
+              {isMobileFiltersOpen
+                ? "Hide Filters"
+                : `Filters${activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}`}
+            </button>
+          ) : (
+            <div className="header-context-pill">{headerContextLabel}</div>
+          )}
+        </div>
+
+        <div className="header-meta">
+          <span>{headerContextLabel}</span>
+          <span>{data.unresolved_schedule_count.toLocaleString()} papers still need schedule metadata.</span>
+          {generatedLabel ? <span>Updated {generatedLabel}</span> : null}
+        </div>
       </header>
-
-      <section className="toolbar">
-        <div className="toolbar-tabs" role="tablist" aria-label="Primary views">
-          <button
-            className={view === "explore" ? "tab is-active" : "tab"}
-            onClick={() => setView("explore")}
-            role="tab"
-            aria-selected={view === "explore"}
-          >
-            Explore
-          </button>
-          <button
-            className={view === "agenda" ? "tab is-active" : "tab"}
-            onClick={() => setView("agenda")}
-            role="tab"
-            aria-selected={view === "agenda"}
-          >
-            Agenda
-          </button>
-        </div>
-
-        <div className="toolbar-meta">
-          <span>{data.unresolved_schedule_count} papers still lack schedule metadata.</span>
-          <span>Generated {data.generated_at || "locally"}.</span>
-        </div>
-      </section>
 
       {view === "explore" ? (
         <section className="explore-layout">
-          <aside className="filters-card">
-            <div className="filters-header">
-              <h2>Filters</h2>
-              <button className="ghost-button" onClick={() => setFilters(DEFAULT_FILTERS)}>
-                Clear all
-              </button>
-            </div>
-
-            <label className="field">
-              <span>Search title, abstract, authors, topics</span>
-              <input
-                type="search"
-                value={filters.query}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    query: event.target.value,
-                  }))
-                }
-                placeholder="reasoning, multimodal, safety, meta-learning..."
-              />
-            </label>
-
-            <div className="filter-row">
-              <label className="field">
-                <span>Date</span>
-                <select
-                  value={filters.selectedDate}
-                  onChange={(event) =>
-                    setFilters((current) => ({
-                      ...current,
-                      selectedDate: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">All conference days</option>
-                  {data.session_dates.map((date) => (
-                    <option key={date} value={date}>
-                      {formatDateLabel(date)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field">
-                <span>Session type</span>
-                <select
-                  value={filters.selectedSessionType}
-                  onChange={(event) =>
-                    setFilters((current) => ({
-                      ...current,
-                      selectedSessionType: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">All formats</option>
-                  {data.session_types.map((sessionType) => (
-                    <option key={sessionType} value={sessionType}>
-                      {sessionType}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="toggle-stack">
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={filters.bookmarkedOnly}
-                  onChange={(event) =>
-                    setFilters((current) => ({
-                      ...current,
-                      bookmarkedOnly: event.target.checked,
-                    }))
-                  }
-                />
-                <span>Bookmarked only</span>
-              </label>
-
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={filters.scheduledOnly}
-                  onChange={(event) =>
-                    setFilters((current) => ({
-                      ...current,
-                      scheduledOnly: event.target.checked,
-                    }))
-                  }
-                />
-                <span>Scheduled only</span>
-              </label>
-            </div>
-
-            <div className="topic-panel">
+          {!isMobile || isMobileFiltersOpen ? (
+            <aside className={isMobile ? "filters-card is-mobile-open" : "filters-card"}>
               <div className="filters-header">
-                <h3>Topic tags</h3>
-                <span>{filters.selectedTopics.length} selected</span>
+                <div>
+                  <p className="eyebrow">Refine</p>
+                  <h2>Filters</h2>
+                </div>
+                <button className="ghost-button" onClick={resetFilters} type="button">
+                  Clear All
+                </button>
               </div>
-              <div className="topic-grid">
-                {data.topic_tags.map((topic) => {
-                  const selected = filters.selectedTopics.includes(topic);
-                  return (
-                    <button
-                      key={topic}
-                      className={selected ? "topic-chip is-selected" : "topic-chip"}
-                      onClick={() => toggleTopic(topic)}
-                      type="button"
-                    >
-                      {topic}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </aside>
 
-          <section className="results-column">
+              <p className="filters-note">
+                Narrow the paper wall by day, format, saved status, and topic filters.
+              </p>
+
+              <div className="filter-row">
+                <label className="field">
+                  <span>Date</span>
+                  <select
+                    name="date"
+                    value={filters.selectedDate}
+                    onChange={(event) => updateFilters({ selectedDate: event.target.value })}
+                  >
+                    <option value="">All conference days</option>
+                    {data.session_dates.map((date) => (
+                      <option key={date} value={date}>
+                        {formatDateLabel(date)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Session Type</span>
+                  <select
+                    name="sessionType"
+                    value={filters.selectedSessionType}
+                    onChange={(event) => updateFilters({ selectedSessionType: event.target.value })}
+                  >
+                    <option value="">All formats</option>
+                    {data.session_types.map((sessionType) => (
+                      <option key={sessionType} value={sessionType}>
+                        {sessionType}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="toggle-stack">
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={filters.bookmarkedOnly}
+                    onChange={(event) => updateFilters({ bookmarkedOnly: event.target.checked })}
+                  />
+                  <span>Saved papers only</span>
+                </label>
+
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={filters.scheduledOnly}
+                    onChange={(event) => updateFilters({ scheduledOnly: event.target.checked })}
+                  />
+                  <span>Scheduled sessions only</span>
+                </label>
+              </div>
+
+              <div className="topic-panel">
+                <div className="filters-header">
+                  <h3>Topic Filters</h3>
+                  <span>{filters.selectedTopics.length} active</span>
+                </div>
+                <label className="topic-search-field">
+                  <span>Find topics</span>
+                  <input
+                    className="search-input"
+                    type="search"
+                    name="topicQuery"
+                    autoComplete="off"
+                    value={topicQuery}
+                    onChange={(event) => setTopicQuery(event.target.value)}
+                    placeholder="Search by area or keyword"
+                  />
+                </label>
+                {filters.selectedTopics.length > 0 ? (
+                  <div className="selected-topic-row">
+                    {filters.selectedTopics.map((topic) => (
+                      <button
+                        key={topic}
+                        className="topic-chip is-selected"
+                        onClick={() => toggleTopic(topic)}
+                        type="button"
+                        aria-label={`Remove topic filter ${formatTopicLabel(topic)}`}
+                      >
+                        {formatTopicLabel(topic)} ×
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="topic-grid">
+                  {visibleTopicTags.map((topic) => {
+                    const selected = filters.selectedTopics.includes(topic);
+                    return (
+                      <button
+                        key={topic}
+                        className={selected ? "topic-chip is-selected" : "topic-chip"}
+                        onClick={() => toggleTopic(topic)}
+                        type="button"
+                      >
+                        {formatTopicLabel(topic)}
+                      </button>
+                    );
+                  })}
+                </div>
+                {visibleTopicTags.length === 0 ? (
+                  <p className="topic-empty">No topics match this search.</p>
+                ) : null}
+              </div>
+            </aside>
+          ) : null}
+
+          <section className="results-column" id="results-panel" aria-live="polite">
             <div className="results-toolbar">
               <div>
                 <p className="eyebrow">Explore</p>
-                <h2>{filteredPapers.length.toLocaleString()} papers match your current lens.</h2>
+                <h2>
+                  {filteredPapers.length > 0
+                    ? `${filteredPapers.length.toLocaleString()} papers in view.`
+                    : "No papers match the current lens."}
+                </h2>
               </div>
               <div className="bulk-actions">
-                <button className="action-button" onClick={bookmarkVisibleResults}>
-                  Bookmark visible ({filteredPapers.length})
+                <button className="action-button" onClick={bookmarkVisibleResults} type="button">
+                  Save Visible ({filteredPapers.length.toLocaleString()})
                 </button>
-                <button className="ghost-button" onClick={clearVisibleBookmarks}>
-                  Clear visible ({bookmarkedVisibleCount})
+                <button className="ghost-button" onClick={clearVisibleBookmarks} type="button">
+                  Clear Visible ({bookmarkedVisibleCount.toLocaleString()})
                 </button>
               </div>
             </div>
 
-            <div className="paper-list" role="list">
-              {filteredPapers.map((paper) => {
-                const isSelected = selectedPaperId === paper.paper_id;
-                const isBookmarked = bookmarks.has(paper.paper_id);
-                return (
-                  <article
-                    key={paper.paper_id}
-                    className={isSelected ? "paper-card is-selected" : "paper-card"}
-                    onClick={() => setSelectedPaperId(paper.paper_id)}
-                    role="listitem"
-                  >
-                    <div className="paper-card-topline">
-                      <span className="paper-badge">{paper.session_type || "Paper"}</span>
-                      <button
-                        className={isBookmarked ? "bookmark-button is-on" : "bookmark-button"}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleBookmark(paper.paper_id);
-                        }}
-                        aria-label={`Bookmark ${paper.title}`}
-                        aria-pressed={isBookmarked}
-                        type="button"
-                      >
-                        {isBookmarked ? "Saved" : "Save"}
-                      </button>
-                    </div>
-                    <h3>{paper.title}</h3>
-                    <p className="paper-authors">{paper.authors || "Authors unavailable"}</p>
-                    <p className="paper-schedule">{formatScheduleLabel(paper)}</p>
-                    <div className="paper-tags">
-                      {paper.topic_tags.slice(0, 2).map((topic) => (
-                        <span key={topic} className="tag">
-                          {topic}
-                        </span>
-                      ))}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
-          <aside className="detail-panel">
-            {selectedPaper ? (
-              <>
-                <p className="eyebrow">Selected paper</p>
-                <h2>{selectedPaper.title}</h2>
-                <p className="detail-authors">{selectedPaper.authors || "Authors unavailable"}</p>
-                <p className="detail-schedule">{formatScheduleLabel(selectedPaper)}</p>
-
-                <div className="detail-links">
-                  <ExternalLink href={selectedPaper.paper_url} label="Paper page" />
-                  <ExternalLink href={selectedPaper.project_page} label="Project" />
-                  <ExternalLink href={selectedPaper.pdf_url} label="PDF" />
-                  <ExternalLink href={selectedPaper.video_url} label="Video" />
-                  <ExternalLink href={selectedPaper.poster_url} label="Poster" />
-                  <ExternalLink href={selectedPaper.code_url} label="Code" />
-                </div>
-
-                <div className="detail-topics">
-                  {selectedPaper.topic_parts.map((topic) => (
-                    <div key={topic.raw} className="topic-block">
-                      <span>{topic.group || "Topic"}</span>
-                      <strong>{topic.name}</strong>
-                    </div>
-                  ))}
-                </div>
-
-                <section className="detail-abstract">
-                  <h3>Abstract</h3>
-                  <p>{selectedPaper.abstract || "Abstract unavailable."}</p>
-                </section>
-              </>
+            {filteredPapers.length > 0 ? (
+              <List
+                className="paper-vlist"
+                rowComponent={PaperListRow}
+                rowCount={filteredPapers.length}
+                rowHeight={resultsItemSize}
+                rowProps={paperListRowData}
+                overscanCount={6}
+                style={{ height: resultsListHeight, width: "100%" }}
+              />
             ) : (
-              <div className="detail-empty">
-                <p className="eyebrow">Detail pane</p>
-                <h2>Pick a paper to inspect the schedule and links.</h2>
+              <div className="empty-state">
+                <p className="eyebrow">Nothing in View</p>
+                <h3>Try a broader filter combination.</h3>
                 <p>
-                  Shared links restore this panel via <code>?paper=...</code>. Filters and bookmarks
-                  stay local.
+                  The current query and refine controls filter out every paper. Clear the filters or
+                  loosen the search terms.
                 </p>
+                <button className="action-button" onClick={resetFilters} type="button">
+                  Reset Filters
+                </button>
               </div>
             )}
-          </aside>
+          </section>
+
         </section>
       ) : (
         <section className="agenda-layout">
           <div className="agenda-toolbar">
             <div>
               <p className="eyebrow">Agenda</p>
-              <h2>{bookmarkedPapers.length.toLocaleString()} bookmarked papers in your local plan.</h2>
+              <h2>{bookmarkedPapers.length.toLocaleString()} saved papers in your local plan.</h2>
             </div>
+
             <div className="bulk-actions">
               <button
-                className="action-button"
+                className="ghost-button"
                 onClick={exportBookmarksCsv}
                 disabled={bookmarkedPapers.length === 0}
+                type="button"
               >
                 Export CSV
               </button>
@@ -512,71 +683,250 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
                 className="action-button"
                 onClick={exportBookmarksIcs}
                 disabled={bookmarkedPapers.length === 0}
+                type="button"
               >
                 Export ICS
               </button>
             </div>
           </div>
 
-          <p className="agenda-note">
-            {skippedCount > 0
-              ? `${skippedCount} bookmarked papers were skipped from ICS because their schedule is still unresolved.`
-              : "All bookmarked papers have enough schedule metadata for ICS export."}
-          </p>
+          {bookmarkedPapers.length === 0 ? (
+            <div className="empty-state agenda-empty-state">
+              <p className="eyebrow">Nothing Saved Yet</p>
+              <h3>Start in Explore and save the papers worth tracking.</h3>
+              <p>
+                Your agenda fills itself from saved papers. Once you shortlist a few results, this
+                view becomes a clean schedule board and export hub.
+              </p>
+              <button className="action-button" onClick={() => handleViewChange("explore")} type="button">
+                Open Explore
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="agenda-note">
+                {skippedAgendaCount > 0
+                  ? `${skippedAgendaCount} saved papers are still missing enough schedule metadata for ICS export.`
+                  : "All saved papers have enough schedule metadata for ICS export."}
+              </p>
 
-          {agenda.scheduledGroups.map((group) => (
-            <section key={group.date} className="agenda-day">
-              <header className="agenda-day-header">
-                <p className="eyebrow">Conference day</p>
-                <h3>{group.label}</h3>
-              </header>
-              <div className="agenda-grid">
-                {group.papers.map((paper) => (
-                  <article key={paper.paper_id} className="agenda-card">
-                    <div className="agenda-card-topline">
-                      <span className="paper-badge">{paper.session_type || "Paper"}</span>
-                      <span>
-                        {paper.session_start || "TBD"}
-                        {paper.session_end ? `-${paper.session_end}` : ""}
-                      </span>
-                    </div>
-                    <h4>{paper.title}</h4>
-                    <p>{paper.authors || "Authors unavailable"}</p>
-                    <p>{paper.room || "Room pending"}</p>
-                    <div className="detail-links">
-                      <button className="ghost-button" onClick={() => setSelectedPaperId(paper.paper_id)}>
-                        Open details
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ))}
+              {agenda.scheduledGroups.map((group) => (
+                <section key={group.date} className="agenda-day">
+                  <header className="agenda-day-header">
+                    <p className="eyebrow">Conference Day</p>
+                    <h3>{group.label}</h3>
+                  </header>
+                  <div className="agenda-grid">
+                    {group.papers.map((paper) => (
+                      <article key={paper.paper_id} className="agenda-card">
+                        <div className="agenda-card-topline">
+                          <span className="paper-badge">{paper.session_type || "Paper"}</span>
+                          <span className="agenda-time">
+                            {paper.session_start || "TBD"}
+                            {paper.session_end ? `-${paper.session_end}` : ""}
+                          </span>
+                        </div>
+                        <h4>{formatPaperTitle(paper.title)}</h4>
+                        <p>{paper.authors || "Authors unavailable"}</p>
+                        <p>{paper.room || "Room pending"}</p>
+                        <button
+                          className="ghost-button"
+                          onClick={() => openPaper(paper.paper_id)}
+                          type="button"
+                        >
+                          View details
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))}
 
-          {agenda.unscheduled.length > 0 ? (
-            <section className="agenda-day">
-              <header className="agenda-day-header">
-                <p className="eyebrow">Needs manual follow-up</p>
-                <h3>Unscheduled bookmarks</h3>
-              </header>
-              <div className="agenda-grid">
-                {agenda.unscheduled.map((paper) => (
-                  <article key={paper.paper_id} className="agenda-card is-unscheduled">
-                    <div className="agenda-card-topline">
-                      <span className="paper-badge">Pending</span>
-                    </div>
-                    <h4>{paper.title}</h4>
-                    <p>{paper.authors || "Authors unavailable"}</p>
-                    <p>{paper.notes || "No schedule metadata yet."}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
+              {agenda.unscheduled.length > 0 ? (
+                <section className="agenda-day">
+                  <header className="agenda-day-header">
+                    <p className="eyebrow">Needs Manual Follow-Up</p>
+                    <h3>Unscheduled saved papers</h3>
+                  </header>
+                  <div className="agenda-grid">
+                    {agenda.unscheduled.map((paper) => (
+                      <article key={paper.paper_id} className="agenda-card is-unscheduled">
+                        <div className="agenda-card-topline">
+                          <span className="paper-badge">Pending</span>
+                        </div>
+                        <h4>{formatPaperTitle(paper.title)}</h4>
+                        <p>{paper.authors || "Authors unavailable"}</p>
+                        <p>{paper.notes || "No schedule metadata yet."}</p>
+                        <button
+                          className="ghost-button"
+                          onClick={() => openPaper(paper.paper_id)}
+                          type="button"
+                        >
+                          View details
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </>
+          )}
         </section>
       )}
+
+
+      {selectedPaper && isDetailOpen ? (
+        <div
+          className="detail-modal-backdrop"
+          onClick={() => setIsDetailOpen(false)}
+          role="presentation"
+        >
+          <aside
+            className="detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={formatPaperTitle(selectedPaper.title)}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="detail-modal-header">
+              <button
+                className="ghost-button close-button"
+                onClick={() => setIsDetailOpen(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <PaperDetail paper={selectedPaper} />
+          </aside>
+        </div>
+      ) : null}
     </main>
+  );
+}
+
+function PaperCard({
+  paper,
+  isBookmarked,
+  isSelected,
+  onOpen,
+  onToggleBookmark,
+  style,
+}: {
+  paper: Paper;
+  isBookmarked: boolean;
+  isSelected: boolean;
+  onOpen: () => void;
+  onToggleBookmark: () => void;
+  style?: CSSProperties;
+}) {
+  return (
+    <article className={isSelected ? "paper-card is-selected" : "paper-card"} style={style}>
+      <div className="paper-card-topline">
+        <span className="paper-badge">{paper.session_type || "Paper"}</span>
+        <button
+          className={isBookmarked ? "bookmark-button is-on" : "bookmark-button"}
+          onClick={onToggleBookmark}
+          aria-label={`${isBookmarked ? "Remove bookmark for" : "Save bookmark for"} ${formatPaperTitle(paper.title)}`}
+          aria-pressed={isBookmarked}
+          type="button"
+        >
+          {isBookmarked ? "Saved" : "Save"}
+        </button>
+      </div>
+
+      <button
+        className="paper-card-button"
+        onClick={onOpen}
+        aria-pressed={isSelected}
+        type="button"
+      >
+        <span className="paper-card-title">{formatPaperTitle(paper.title)}</span>
+        <span className="paper-authors">{paper.authors || "Authors unavailable"}</span>
+        <span className="paper-schedule">{formatScheduleLabel(paper)}</span>
+        {paper.topic_tags.length > 0 ? (
+          <span className="paper-tags">
+            {paper.topic_tags.slice(0, 3).map((topic) => (
+              <span key={topic} className="tag">
+                {formatTopicLabel(topic)}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </button>
+    </article>
+  );
+}
+
+function PaperListRow({
+  ariaAttributes,
+  bookmarks,
+  index,
+  onOpen,
+  onToggleBookmark,
+  papers,
+  selectedPaperId,
+  style,
+}: RowComponentProps<PaperListRowData>) {
+  const paper = papers[index];
+  if (!paper) {
+    return null;
+  }
+
+  return (
+    <div
+      {...ariaAttributes}
+      style={{
+        ...style,
+        height: Number(style.height) - 14,
+        width: "100%",
+      }}
+    >
+      <PaperCard
+        paper={paper}
+        isBookmarked={bookmarks.has(paper.paper_id)}
+        isSelected={selectedPaperId === paper.paper_id}
+        onOpen={() => onOpen(paper.paper_id)}
+        onToggleBookmark={() => onToggleBookmark(paper.paper_id)}
+        style={{ height: "100%" }}
+      />
+    </div>
+  );
+}
+
+function PaperDetail({ paper }: { paper: Paper }) {
+  return (
+    <div className="paper-detail">
+      <p className="eyebrow">Selected Paper</p>
+      <h2>{formatPaperTitle(paper.title)}</h2>
+      <p className="detail-authors">{paper.authors || "Authors unavailable"}</p>
+      <p className="detail-schedule">{formatScheduleLabel(paper)}</p>
+
+      <div className="detail-links">
+        <ExternalLink href={paper.paper_url} label="Paper page" />
+        <ExternalLink href={paper.project_page} label="Project" />
+        <ExternalLink href={paper.pdf_url} label="PDF" />
+        <ExternalLink href={paper.video_url} label="Video" />
+        <ExternalLink href={paper.poster_url} label="Poster" />
+        <ExternalLink href={paper.code_url} label="Code" />
+      </div>
+
+      {paper.topic_parts.length > 0 ? (
+        <div className="detail-topics">
+          {paper.topic_parts.map((topic) => (
+            <div key={topic.raw} className="topic-block">
+              <span>{topic.group || "Topic"}</span>
+              <strong>{topic.name}</strong>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <section className="detail-abstract">
+        <h3>Abstract</h3>
+        <p>{paper.abstract || "Abstract unavailable."}</p>
+      </section>
+    </div>
   );
 }
 
@@ -591,9 +941,136 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function readSelectedPaperId(): string | null {
-  if (typeof window === "undefined") {
-    return null;
+function countActiveFilters(filters: Filters): number {
+  return [
+    filters.selectedDate,
+    filters.selectedSessionType,
+    filters.bookmarkedOnly ? "bookmarked" : "",
+    filters.scheduledOnly ? "scheduled" : "",
+    filters.selectedTopics.length > 0 ? "topics" : "",
+  ].filter(Boolean).length;
+}
+
+function formatGeneratedLabel(value: string): string {
+  if (!value) {
+    return "";
   }
-  return new URLSearchParams(window.location.search).get("paper");
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return `${new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(date)} UTC`;
+}
+
+function formatTopicLabel(topic: string): string {
+  return topic.replaceAll("->", " › ");
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(query).matches : false,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query) as MediaQueryList & {
+      addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+      removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+    };
+    const handleChange = (event: MediaQueryListEvent) => {
+      setMatches(event.matches);
+    };
+
+    setMatches(mediaQuery.matches);
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => {
+        mediaQuery.removeEventListener("change", handleChange);
+      };
+    }
+    mediaQuery.addListener?.(handleChange);
+    return () => {
+      mediaQuery.removeListener?.(handleChange);
+    };
+  }, [query]);
+
+  return matches;
+}
+
+function useViewportHeight(): number {
+  const [height, setHeight] = useState(() =>
+    typeof window !== "undefined" ? window.innerHeight : 900,
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setHeight(window.innerHeight);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  return height;
+}
+
+function readExplorerUrlState(): ExplorerUrlState {
+  if (typeof window === "undefined") {
+    return {
+      view: "explore",
+      paper: null,
+      filters: DEFAULT_FILTERS,
+    };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const topicValue = params.get("topics") ?? "";
+
+  return {
+    view: params.get("view") === "agenda" ? "agenda" : "explore",
+    paper: params.get("paper"),
+    filters: {
+      query: params.get("q") ?? "",
+      selectedTopics: topicValue ? topicValue.split(",").filter(Boolean) : [],
+      selectedDate: params.get("date") ?? "",
+      selectedSessionType: params.get("sessionType") ?? "",
+      bookmarkedOnly: params.get("bookmarked") === "1",
+      scheduledOnly: params.get("scheduled") === "1",
+    },
+  };
+}
+
+function writeExplorerUrlState(state: ExplorerUrlState): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  setUrlParam(url.searchParams, "view", state.view === "agenda" ? "agenda" : "");
+  setUrlParam(url.searchParams, "paper", state.paper);
+  setUrlParam(url.searchParams, "q", state.filters.query);
+  setUrlParam(url.searchParams, "date", state.filters.selectedDate);
+  setUrlParam(url.searchParams, "sessionType", state.filters.selectedSessionType);
+  setUrlParam(url.searchParams, "topics", state.filters.selectedTopics.join(","));
+  setUrlParam(url.searchParams, "bookmarked", state.filters.bookmarkedOnly ? "1" : "");
+  setUrlParam(url.searchParams, "scheduled", state.filters.scheduledOnly ? "1" : "");
+  window.history.replaceState({}, "", url);
+}
+
+function setUrlParam(params: URLSearchParams, key: string, value: string | null): void {
+  if (!value) {
+    params.delete(key);
+    return;
+  }
+  params.set(key, value);
 }

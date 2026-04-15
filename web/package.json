@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-window": "^2.2.7",
+    "virtua": "^0.49.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

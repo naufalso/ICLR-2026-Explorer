@@ -1,11 +1,17 @@
 import type { Paper } from "../types";
+import { formatPaperTitle } from "./title";
 
 const ICS_TIMEZONE = "America/Los_Angeles";
 
 export function buildCsv(columns: string[], papers: Paper[]): string {
   const lines = [columns.join(",")];
   for (const paper of papers) {
-    const values = columns.map((column) => escapeCsvField(String(paper[column as keyof Paper] ?? "")));
+    const values = columns.map((column) => {
+      const value = paper[column as keyof Paper] ?? "";
+      return escapeCsvField(
+        String(column === "title" ? formatPaperTitle(String(value)) : value),
+      );
+    });
     lines.push(values.join(","));
   }
   return `${lines.join("\n")}\n`;
@@ -26,7 +32,7 @@ export function buildIcs(papers: Paper[]): { content: string; skippedCount: numb
       `DTSTAMP:${now}`,
       `DTSTART;TZID=${ICS_TIMEZONE}:${start}`,
       `DTEND;TZID=${ICS_TIMEZONE}:${end}`,
-      `SUMMARY:${escapeIcsValue(paper.title)}`,
+      `SUMMARY:${escapeIcsValue(formatPaperTitle(paper.title))}`,
       `DESCRIPTION:${escapeIcsValue(description)}`,
       `LOCATION:${escapeIcsValue(paper.room)}`,
       `URL:${escapeIcsValue(paper.paper_url)}`,
