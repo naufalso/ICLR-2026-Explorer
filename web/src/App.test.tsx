@@ -45,18 +45,50 @@ vi.mock("react-window", () => ({
 }));
 
 describe("ExplorerApp", () => {
-  it("auto-selects the first visible paper and formats the generated timestamp", () => {
+  it("does not auto-open a selected paper panel by default and formats the generated timestamp", () => {
     render(<ExplorerApp data={fixturePayload} />);
 
+    expect(
+      screen.queryByRole("heading", {
+        name: "Trustworthy Agents for Long-Horizon Planning",
+        level: 2,
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Updated Apr 15, 2026, 11:56 AM UTC")).toBeInTheDocument();
+  });
+
+
+  it("does not reopen paper detail when search/filter interactions change results", async () => {
+    const user = userEvent.setup();
+    render(<ExplorerApp data={fixturePayload} />);
+
+    await user.click(screen.getByText("Trustworthy Agents for Long-Horizon Planning"));
     expect(
       screen.getByRole("heading", {
         name: "Trustworthy Agents for Long-Horizon Planning",
         level: 2,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Updated Apr 15, 2026, 11:56 AM UTC")).toBeInTheDocument();
-  });
 
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(
+      screen.queryByRole("heading", {
+        name: "Trustworthy Agents for Long-Horizon Planning",
+        level: 2,
+      }),
+    ).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search papers" }), "zzzz");
+    await user.clear(screen.getByRole("searchbox", { name: "Search papers" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Session Type" }), "Poster");
+
+    expect(
+      screen.queryByRole("heading", {
+        name: "Trustworthy Agents for Long-Horizon Planning",
+        level: 2,
+      }),
+    ).not.toBeInTheDocument();
+  });
   it("restores URL-driven filters and selected paper from the query string", () => {
     window.history.replaceState(
       {},

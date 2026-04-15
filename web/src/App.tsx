@@ -13,6 +13,7 @@ import { List, type RowComponentProps } from "react-window";
 import { buildCsv, buildIcs, downloadTextFile } from "./lib/export";
 import { filterPapers, formatDateLabel, formatScheduleLabel, groupAgenda } from "./lib/filters";
 import { bookmarkStorageKey, loadBookmarks, saveBookmarks } from "./lib/storage";
+import { formatPaperTitle } from "./lib/title";
 import type { Filters, Paper, PapersPayload } from "./types";
 
 const DEFAULT_FILTERS: Filters = {
@@ -117,6 +118,8 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
   const [bookmarks, setBookmarks] = useState<Set<string>>(() => loadBookmarks());
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(() => Boolean(initialUrlState.paper));
+  const [isDesktopDetailOpen, setIsDesktopDetailOpen] = useState(() => Boolean(initialUrlState.paper));
+  const [topicQuery, setTopicQuery] = useState("");
   const isMobile = useMediaQuery(MOBILE_QUERY);
   const viewportHeight = useViewportHeight();
   const deferredQuery = useDeferredValue(filters.query);
@@ -131,6 +134,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     setFilters(nextState.filters);
     setSelectedPaperId(nextState.paper);
     setIsMobileDetailOpen(nextState.view === "explore" && Boolean(nextState.paper));
+    setIsDesktopDetailOpen(nextState.view === "explore" && Boolean(nextState.paper));
     setIsMobileFiltersOpen(false);
   });
 
@@ -160,6 +164,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     if (view !== "explore") {
       setIsMobileFiltersOpen(false);
       setIsMobileDetailOpen(false);
+      setIsDesktopDetailOpen(false);
     }
   }, [view]);
 
@@ -222,11 +227,18 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
   const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters]);
   const generatedLabel = useMemo(() => formatGeneratedLabel(data.generated_at), [data.generated_at]);
   const skippedAgendaCount = useMemo(() => buildIcs(bookmarkedPapers).skippedCount, [bookmarkedPapers]);
+  const visibleTopicTags = useMemo(() => {
+    const query = topicQuery.trim().toLowerCase();
+    if (!query) {
+      return data.topic_tags;
+    }
+    return data.topic_tags.filter((topic) => formatTopicLabel(topic).toLowerCase().includes(query));
+  }, [data.topic_tags, topicQuery]);
   const resultsListHeight = useMemo(
     () =>
       Math.max(
-        isMobile ? 420 : 520,
-        Math.min(Math.round(viewportHeight * (isMobile ? 0.62 : 0.68)), isMobile ? 720 : 920),
+        isMobile ? 460 : 620,
+        Math.min(Math.round(viewportHeight * (isMobile ? 0.72 : 0.8)), isMobile ? 860 : 1400),
       ),
     [isMobile, viewportHeight],
   );
@@ -246,6 +258,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     if (selectedPaperId && !data.papers.some((paper) => paper.paper_id === selectedPaperId)) {
       setSelectedPaperId(null);
       setIsMobileDetailOpen(false);
+      setIsDesktopDetailOpen(false);
     }
   }, [data.papers, selectedPaperId]);
 
@@ -257,13 +270,12 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     if (filteredPapers.length === 0) {
       setSelectedPaperId(null);
       setIsMobileDetailOpen(false);
+      setIsDesktopDetailOpen(false);
       return;
     }
 
     if (!selectedPaperId) {
-      if (!isMobile) {
-        setSelectedPaperId(filteredPapers[0].paper_id);
-      }
+      setIsDesktopDetailOpen(false);
       return;
     }
 
@@ -272,13 +284,9 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
       return;
     }
 
-    if (isMobile) {
-      setSelectedPaperId(null);
-      setIsMobileDetailOpen(false);
-      return;
-    }
-
-    setSelectedPaperId(filteredPapers[0].paper_id);
+    setSelectedPaperId(null);
+    setIsMobileDetailOpen(false);
+    setIsDesktopDetailOpen(false);
   }, [filteredPapers, isMobile, selectedPaperId, view]);
 
   function updateFilters(nextValue: Partial<Filters>) {
@@ -295,6 +303,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     if (nextView !== "explore") {
       setIsMobileFiltersOpen(false);
       setIsMobileDetailOpen(false);
+      setIsDesktopDetailOpen(false);
     }
   }
 
@@ -355,7 +364,9 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
     }
     if (isMobile) {
       setIsMobileDetailOpen(true);
+      return;
     }
+    setIsDesktopDetailOpen(true);
   }
 
   function resetFilters() {
@@ -387,12 +398,8 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
       <header className="command-header">
         <div className="command-header-top">
           <div className="brand-block">
-            <p className="eyebrow">ICLR 2026 field planner</p>
-            <h1>Find the right sessions fast.</h1>
-            <p className="command-copy">
-              Search the full program, pin the papers that matter, and build a clean local agenda
-              without wrestling with the conference site.
-            </p>
+            <p className="eyebrow">ICLR 2026 conference explorer</p>
+            <h1>Scan papers, plan sessions.</h1>
           </div>
 
           <dl className="stat-strip">
@@ -410,6 +417,11 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
             </div>
           </dl>
         </div>
+
+        <p className="command-copy">
+          Search the full program, pin the papers that matter, and build a clean local agenda
+          without wrestling with the conference site.
+        </p>
 
         <div className="command-bar">
           <div className="toolbar-tabs" role="tablist" aria-label="Primary views">
@@ -484,7 +496,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
               </div>
 
               <p className="filters-note">
-                Narrow the paper wall by day, format, saved status, and topic clusters.
+                Narrow the paper wall by day, format, saved status, and topic filters.
               </p>
 
               <div className="filter-row">
@@ -543,11 +555,38 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
 
               <div className="topic-panel">
                 <div className="filters-header">
-                  <h3>Topic Clusters</h3>
+                  <h3>Topic Filters</h3>
                   <span>{filters.selectedTopics.length} active</span>
                 </div>
+                <label className="topic-search-field">
+                  <span>Find topics</span>
+                  <input
+                    className="search-input"
+                    type="search"
+                    name="topicQuery"
+                    autoComplete="off"
+                    value={topicQuery}
+                    onChange={(event) => setTopicQuery(event.target.value)}
+                    placeholder="Search by area or keyword"
+                  />
+                </label>
+                {filters.selectedTopics.length > 0 ? (
+                  <div className="selected-topic-row">
+                    {filters.selectedTopics.map((topic) => (
+                      <button
+                        key={topic}
+                        className="topic-chip is-selected"
+                        onClick={() => toggleTopic(topic)}
+                        type="button"
+                        aria-label={`Remove topic filter ${formatTopicLabel(topic)}`}
+                      >
+                        {formatTopicLabel(topic)} ×
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="topic-grid">
-                  {data.topic_tags.map((topic) => {
+                  {visibleTopicTags.map((topic) => {
                     const selected = filters.selectedTopics.includes(topic);
                     return (
                       <button
@@ -556,11 +595,14 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
                         onClick={() => toggleTopic(topic)}
                         type="button"
                       >
-                        {topic}
+                        {formatTopicLabel(topic)}
                       </button>
                     );
                   })}
                 </div>
+                {visibleTopicTags.length === 0 ? (
+                  <p className="topic-empty">No topics match this search.</p>
+                ) : null}
               </div>
             </aside>
           ) : null}
@@ -610,19 +652,6 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
             )}
           </section>
 
-          {!isMobile ? (
-            <aside className="detail-panel">
-              {selectedPaper ? (
-                <PaperDetail paper={selectedPaper} />
-              ) : (
-                <div className="empty-state detail-empty-state">
-                  <p className="eyebrow">No Selection</p>
-                  <h3>Filter down to a paper to inspect the detail pane.</h3>
-                  <p>The detail pane tracks the selected result and keeps deep links stable via the URL.</p>
-                </div>
-              )}
-            </aside>
-          ) : null}
         </section>
       ) : (
         <section className="agenda-layout">
@@ -688,7 +717,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
                             {paper.session_end ? `-${paper.session_end}` : ""}
                           </span>
                         </div>
-                        <h4>{paper.title}</h4>
+                        <h4>{formatPaperTitle(paper.title)}</h4>
                         <p>{paper.authors || "Authors unavailable"}</p>
                         <p>{paper.room || "Room pending"}</p>
                         <button
@@ -716,7 +745,7 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
                         <div className="agenda-card-topline">
                           <span className="paper-badge">Pending</span>
                         </div>
-                        <h4>{paper.title}</h4>
+                        <h4>{formatPaperTitle(paper.title)}</h4>
                         <p>{paper.authors || "Authors unavailable"}</p>
                         <p>{paper.notes || "No schedule metadata yet."}</p>
                         <button
@@ -736,6 +765,34 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
         </section>
       )}
 
+
+      {!isMobile && view === "explore" && selectedPaper && isDesktopDetailOpen ? (
+        <div
+          className="desktop-detail-backdrop"
+          onClick={() => setIsDesktopDetailOpen(false)}
+          role="presentation"
+        >
+          <aside
+            className="desktop-detail-drawer"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={formatPaperTitle(selectedPaper.title)}
+          >
+            <div className="desktop-sheet-header">
+              <button
+                className="ghost-button close-button"
+                onClick={() => setIsDesktopDetailOpen(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <PaperDetail paper={selectedPaper} />
+          </aside>
+        </div>
+      ) : null}
+
       {isMobile && view === "explore" && selectedPaper && isMobileDetailOpen ? (
         <div
           className="mobile-sheet-backdrop"
@@ -746,14 +803,10 @@ export function ExplorerApp({ data }: { data: PapersPayload }) {
             className="mobile-detail-sheet"
             role="dialog"
             aria-modal="true"
-            aria-label={selectedPaper.title}
+            aria-label={formatPaperTitle(selectedPaper.title)}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mobile-sheet-header">
-              <div>
-                <p className="eyebrow">Paper Detail</p>
-                <h2>{selectedPaper.title}</h2>
-              </div>
               <button
                 className="ghost-button close-button"
                 onClick={() => setIsMobileDetailOpen(false)}
@@ -792,7 +845,7 @@ function PaperCard({
         <button
           className={isBookmarked ? "bookmark-button is-on" : "bookmark-button"}
           onClick={onToggleBookmark}
-          aria-label={`${isBookmarked ? "Remove bookmark for" : "Save bookmark for"} ${paper.title}`}
+          aria-label={`${isBookmarked ? "Remove bookmark for" : "Save bookmark for"} ${formatPaperTitle(paper.title)}`}
           aria-pressed={isBookmarked}
           type="button"
         >
@@ -806,14 +859,14 @@ function PaperCard({
         aria-pressed={isSelected}
         type="button"
       >
-        <span className="paper-card-title">{paper.title}</span>
+        <span className="paper-card-title">{formatPaperTitle(paper.title)}</span>
         <span className="paper-authors">{paper.authors || "Authors unavailable"}</span>
         <span className="paper-schedule">{formatScheduleLabel(paper)}</span>
         {paper.topic_tags.length > 0 ? (
           <span className="paper-tags">
             {paper.topic_tags.slice(0, 3).map((topic) => (
               <span key={topic} className="tag">
-                {topic}
+                {formatTopicLabel(topic)}
               </span>
             ))}
           </span>
@@ -863,7 +916,7 @@ function PaperDetail({ paper }: { paper: Paper }) {
   return (
     <div className="paper-detail">
       <p className="eyebrow">Selected Paper</p>
-      <h2>{paper.title}</h2>
+      <h2>{formatPaperTitle(paper.title)}</h2>
       <p className="detail-authors">{paper.authors || "Authors unavailable"}</p>
       <p className="detail-schedule">{formatScheduleLabel(paper)}</p>
 
@@ -934,6 +987,10 @@ function formatGeneratedLabel(value: string): string {
     minute: "2-digit",
     timeZone: "UTC",
   }).format(date)} UTC`;
+}
+
+function formatTopicLabel(topic: string): string {
+  return topic.replaceAll("->", " › ");
 }
 
 function useMediaQuery(query: string): boolean {
