@@ -2,11 +2,14 @@
 __pycache__/
 .cache/
 data/
+!data/
+data/*
+web/public/data/
 .pytest_cache/
 web/node_modules/
 web/dist/
 !data/iclr2026/
-data/iclr2026/*
-!data/iclr2026/papers.csv
-!data/iclr2026/extraction_summary.json
+!data/iclr2026/**
+!web/public/data/
+!web/public/data/papers.json
 *.egg-info/
