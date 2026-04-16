@@ -1,17 +1,17 @@
 # ICLR 2026 Explorer
 
-ICLR 2026 Explorer is a small data pipeline plus a frontend explorer for browsing conference content. The current milestone is focused on conference poster papers: extraction, normalization, schedule enrichment, and a searchable web UI are in place.
+ICLR 2026 Explorer is a small data pipeline plus a frontend explorer for browsing conference content. Poster and oral paper extraction, normalization, schedule enrichment, and a searchable web UI are in place.
 
-The repository is still in progress. Poster paper support is complete for the current phase, while oral sessions, invited talks, workshops, and a dedicated calendar view are planned next.
+The repository is still in progress. Poster and oral paper support are complete for the current phase, while invited talks, workshops, and a dedicated calendar view are planned next.
 
 ## Current Status
 
 - [x] Poster paper extraction from the ICLR virtual site
+- [x] Oral presentation coverage with paired oral/poster paper rows
 - [x] Canonical CSV and JSON artifacts under `data/iclr2026/`
 - [x] Frontend-ready payload generation for the web app
 - [x] React explorer with search, filters, bookmarks, agenda view, and CSV/ICS export
 - [x] GitHub Pages deployment workflow for the frontend
-- [ ] Oral sessions
 - [ ] Invited talks
 - [ ] Workshops
 - [ ] Calendar view
@@ -20,7 +20,7 @@ The repository is still in progress. Poster paper support is complete for the cu
 
 ```text
 .
-├── data/iclr2026/              # Generated poster-paper artifacts
+├── data/iclr2026/              # Generated paper artifacts
 ├── src/iclr_explorer/          # Python extraction and transform pipeline
 ├── tests/                      # Python fixture-based tests
 ├── web/                        # Vite + React frontend
@@ -31,10 +31,10 @@ The repository is still in progress. Poster paper support is complete for the cu
 
 ### Data pipeline
 
-The Python package in [`src/iclr_explorer`](src/iclr_explorer) currently handles poster-paper data:
+The Python package in [`src/iclr_explorer`](src/iclr_explorer) currently handles poster and oral paper data:
 
 - `extract_papers.py`
-  Downloads the ICLR paper index, fetches poster detail pages, merges topic metadata, applies schedule information from detail pages and the conference calendar, then writes canonical artifacts.
+  Downloads the ICLR paper index, fetches poster detail pages, derives linked oral presentations, applies schedule information from detail pages, the oral events page, and the conference calendar, then writes canonical artifacts.
 - `build_web_data.py`
   Converts the canonical CSV into a frontend-friendly JSON payload consumed by the web app.
 - `models.py`
@@ -103,7 +103,7 @@ uv run python -m iclr_explorer.build_web_data
 
 This reads `data/iclr2026/papers.csv` and writes `web/public/data/papers.json`.
 
-### Re-run the poster-paper extractor
+### Re-run the paper extractor
 
 ```bash
 uv run python -m iclr_explorer.extract_papers
@@ -152,7 +152,7 @@ The canonical paper records currently include fields such as:
 - paper identity and URLs
 - title and authors
 - topic tags
-- poster session title, type, date, and time
+- session title, type, date, and time
 - room
 - abstract
 - project, PDF, video, poster, and code links when available
@@ -183,7 +183,7 @@ The Pages build uses `VITE_BASE_PATH` so the app can be hosted under the reposit
 Near-term work is intentionally incremental:
 
 - [x] Keep poster-paper extraction and browsing stable
-- [ ] Add oral-session coverage
+- [x] Add oral-session coverage
 - [ ] Add invited-talk coverage
 - [ ] Add workshop coverage
 - [ ] Add calendar view
@@ -191,6 +191,6 @@ Near-term work is intentionally incremental:
 
 ## Notes
 
-- The current dataset and UI should be treated as poster-paper focused, not conference-complete.
+- Oral-accepted papers currently appear as two rows in the canonical dataset and UI: one `Poster` row and one `Oral` row.
 - Calendar exports use the conference schedule fields present in the generated data.
 - If `web/public/data/papers.json` is missing or stale, rebuild it before running the frontend.
