@@ -1,8 +1,8 @@
 # ICLR 2026 Explorer
 
-ICLR 2026 Explorer is a small data pipeline plus a frontend explorer for browsing conference content. The current milestone is focused on conference poster papers: extraction, normalization, schedule enrichment, and a searchable web UI are in place.
+ICLR 2026 Explorer is a small data pipeline plus a frontend explorer for browsing conference content. Poster papers and workshop events are both supported now, with workshops intentionally kept in a separate explorer lane instead of being merged into the paper workflow.
 
-The repository is still in progress. Poster paper support is complete for the current phase, while oral sessions, invited talks, workshops, and a dedicated calendar view are planned next.
+The repository is still in progress. Poster paper support is complete, workshop support is now in place, and oral sessions, invited talks, and a broader cross-program calendar view are still planned next.
 
 ## Current Status
 
@@ -10,17 +10,17 @@ The repository is still in progress. Poster paper support is complete for the cu
 - [x] Canonical CSV and JSON artifacts under `data/iclr2026/`
 - [x] Frontend-ready payload generation for the web app
 - [x] React explorer with search, filters, bookmarks, agenda view, and CSV/ICS export
+- [x] Dedicated workshop extractor and separate workshop explorer
 - [x] GitHub Pages deployment workflow for the frontend
 - [ ] Oral sessions
 - [ ] Invited talks
-- [ ] Workshops
 - [ ] Calendar view
 
 ## Repository Layout
 
 ```text
 .
-├── data/iclr2026/              # Generated poster-paper artifacts
+├── data/iclr2026/              # Generated paper and workshop artifacts
 ├── src/iclr_explorer/          # Python extraction and transform pipeline
 ├── tests/                      # Python fixture-based tests
 ├── web/                        # Vite + React frontend
@@ -31,14 +31,18 @@ The repository is still in progress. Poster paper support is complete for the cu
 
 ### Data pipeline
 
-The Python package in [`src/iclr_explorer`](src/iclr_explorer) currently handles poster-paper data:
+The Python package in [`src/iclr_explorer`](src/iclr_explorer) currently handles poster-paper data and workshop event data:
 
 - `extract_papers.py`
   Downloads the ICLR paper index, fetches poster detail pages, merges topic metadata, applies schedule information from detail pages and the conference calendar, then writes canonical artifacts.
 - `build_web_data.py`
   Converts the canonical CSV into a frontend-friendly JSON payload consumed by the web app.
+- `extract_workshops.py`
+  Downloads the ICLR workshop listing, fetches workshop detail pages, and writes canonical workshop artifacts.
+- `build_workshop_web_data.py`
+  Converts the canonical workshop CSV into a frontend-friendly JSON payload for the dedicated workshop view.
 - `models.py`
-  Defines the paper schema used across CSV and JSON outputs.
+  Defines the paper and workshop schemas used across CSV and JSON outputs.
 
 ### Frontend
 
@@ -50,6 +54,8 @@ The app in [`web/`](web) currently supports:
 - agenda grouping for bookmarked scheduled papers
 - CSV export of visible results
 - ICS export of bookmarked scheduled papers
+- a separate workshop browser with its own search, date, room, saved-only, and schedule filters
+- local workshop saving plus CSV/ICS export for saved workshop events
 
 ## Tech Stack
 
@@ -103,6 +109,14 @@ uv run python -m iclr_explorer.build_web_data
 
 This reads `data/iclr2026/papers.csv` and writes `web/public/data/papers.json`.
 
+### Rebuild the workshop web payload
+
+```bash
+uv run python -m iclr_explorer.build_workshop_web_data
+```
+
+This reads `data/iclr2026/workshops.csv` and writes `web/public/data/workshops.json`.
+
 ### Re-run the poster-paper extractor
 
 ```bash
@@ -122,6 +136,26 @@ The extractor writes:
 - `data/iclr2026/papers_raw_index.json`
 - `data/iclr2026/papers_enriched.json`
 - `data/iclr2026/extraction_summary.json`
+
+### Re-run the workshop extractor
+
+```bash
+uv run python -m iclr_explorer.extract_workshops
+```
+
+Useful options:
+
+```bash
+uv run python -m iclr_explorer.extract_workshops --limit 10
+uv run python -m iclr_explorer.extract_workshops --refresh
+```
+
+The workshop extractor writes:
+
+- `data/iclr2026/workshops.csv`
+- `data/iclr2026/workshops_raw_index.json`
+- `data/iclr2026/workshops_enriched.json`
+- `data/iclr2026/workshops_extraction_summary.json`
 
 ### Run the frontend locally
 
@@ -166,6 +200,14 @@ The frontend build step adds convenience fields such as:
 - `has_schedule`
 - `search_blob`
 
+Workshop records include:
+
+- workshop identity and URLs
+- title and organizers
+- event type, date, time, timezone, and room
+- summary and project page
+- extraction status and notes
+
 ## Deployment
 
 The repository includes a GitHub Pages workflow at [`deploy-pages.yml`](.github/workflows/deploy-pages.yml).
@@ -183,14 +225,14 @@ The Pages build uses `VITE_BASE_PATH` so the app can be hosted under the reposit
 Near-term work is intentionally incremental:
 
 - [x] Keep poster-paper extraction and browsing stable
+- [x] Add workshop coverage as a separate explorer
 - [ ] Add oral-session coverage
 - [ ] Add invited-talk coverage
-- [ ] Add workshop coverage
 - [ ] Add calendar view
 - [ ] Unify all conference content into a broader schedule explorer
 
 ## Notes
 
-- The current dataset and UI should be treated as poster-paper focused, not conference-complete.
+- Papers and workshops are intentionally separate in the UI right now; workshops have their own saved state and their own CSV/ICS export path.
 - Calendar exports use the conference schedule fields present in the generated data.
-- If `web/public/data/papers.json` is missing or stale, rebuild it before running the frontend.
+- If `web/public/data/papers.json` or `web/public/data/workshops.json` is missing or stale, rebuild them before running the frontend.

@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ExplorerApp } from "./App";
-import { bookmarkStorageKey } from "./lib/storage";
-import { fixturePayload } from "./test/fixtures";
+import { bookmarkStorageKey, workshopBookmarkStorageKey } from "./lib/storage";
+import { emptyWorkshopsPayload, fixturePayload, workshopFixturePayload } from "./test/fixtures";
 
 vi.mock("react-window", () => ({
   List: ({
@@ -50,7 +50,7 @@ afterEach(() => {
 
 describe("ExplorerApp", () => {
   it("does not auto-open a selected paper panel by default and formats the generated timestamp", () => {
-    render(<ExplorerApp data={fixturePayload} />);
+    render(<ExplorerApp data={fixturePayload} workshopsData={emptyWorkshopsPayload} />);
 
     expect(
       screen.queryByRole("heading", {
@@ -64,7 +64,7 @@ describe("ExplorerApp", () => {
 
   it("does not reopen paper detail when search/filter interactions change results", async () => {
     const user = userEvent.setup();
-    render(<ExplorerApp data={fixturePayload} />);
+    render(<ExplorerApp data={fixturePayload} workshopsData={emptyWorkshopsPayload} />);
 
     await user.click(screen.getByText("Trustworthy Agents for Long-Horizon Planning"));
     expect(
@@ -95,7 +95,7 @@ describe("ExplorerApp", () => {
   });
 
   it("waits to apply search text until typing stops or Enter is pressed", async () => {
-    render(<ExplorerApp data={fixturePayload} />);
+    render(<ExplorerApp data={fixturePayload} workshopsData={emptyWorkshopsPayload} />);
 
     const input = screen.getByRole("searchbox", { name: "Search papers" });
     fireEvent.change(input, { target: { value: "zzzz" } });
@@ -119,7 +119,7 @@ describe("ExplorerApp", () => {
       "/?q=multimodal&date=2026-04-24&sessionType=Oral&topics=Computer%20Vision-%3EVision%20Models%20%26%20Multimodal&scheduled=1&paper=p2",
     );
 
-    render(<ExplorerApp data={fixturePayload} />);
+    render(<ExplorerApp data={fixturePayload} workshopsData={emptyWorkshopsPayload} />);
 
     expect(screen.getByDisplayValue("multimodal")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Fri, Apr 24")).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe("ExplorerApp", () => {
 
   it("supports keyboard selection on paper cards", async () => {
     const user = userEvent.setup();
-    render(<ExplorerApp data={fixturePayload} />);
+    render(<ExplorerApp data={fixturePayload} workshopsData={emptyWorkshopsPayload} />);
 
     const secondCardButton = screen
       .getByText("Multimodal Memory for Conference Navigation")
@@ -157,7 +157,7 @@ describe("ExplorerApp", () => {
     const user = userEvent.setup();
     window.localStorage.setItem(bookmarkStorageKey(), JSON.stringify(["p1"]));
 
-    render(<ExplorerApp data={fixturePayload} />);
+    render(<ExplorerApp data={fixturePayload} workshopsData={emptyWorkshopsPayload} />);
 
     await user.click(screen.getByRole("tab", { name: "Agenda" }));
     expect(window.location.search).toContain("view=agenda");
@@ -173,7 +173,7 @@ describe("ExplorerApp", () => {
     const user = userEvent.setup();
     window.localStorage.setItem(bookmarkStorageKey(), JSON.stringify(["p1"]));
 
-    render(<ExplorerApp data={fixturePayload} />);
+    render(<ExplorerApp data={fixturePayload} workshopsData={emptyWorkshopsPayload} />);
     await user.click(screen.getByRole("tab", { name: "Agenda" }));
 
     expect(screen.getByText("1 saved papers in your local plan.")).toBeInTheDocument();
@@ -184,12 +184,44 @@ describe("ExplorerApp", () => {
     const user = userEvent.setup();
     window.localStorage.setItem(bookmarkStorageKey(), JSON.stringify(["p1"]));
 
-    render(<ExplorerApp data={fixturePayload} />);
+    render(<ExplorerApp data={fixturePayload} workshopsData={emptyWorkshopsPayload} />);
     await user.click(screen.getByRole("tab", { name: "Agenda" }));
     await user.click(screen.getByRole("button", { name: "View details" }));
 
     expect(window.location.search).toContain("view=agenda");
     expect(screen.getByRole("heading", { name: "Trustworthy Agents for Long-Horizon Planning", level: 2 })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Agenda" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("keeps workshops in a separate explorer lane with their own filters and details", async () => {
+    const user = userEvent.setup();
+    render(<ExplorerApp data={fixturePayload} workshopsData={workshopFixturePayload} />);
+
+    await user.click(screen.getByRole("tab", { name: "Workshops" }));
+
+    expect(screen.getByRole("searchbox", { name: "Search workshops" })).toBeInTheDocument();
+    expect(screen.getByText("2 workshops in view.")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Room" }), "205");
+    expect(screen.getByText("1 workshops in view.")).toBeInTheDocument();
+
+    await user.click(screen.getByText("1st ICLR Workshop on Time Series in the Age of Large Models"));
+
+    expect(
+      screen.getByRole("heading", {
+        name: "1st ICLR Workshop on Time Series in the Age of Large Models",
+        level: 2,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Summary")).toBeInTheDocument();
+    expect(window.location.search).toContain("content=workshops");
+    expect(window.location.search).toContain("wroom=205");
+
+    await user.click(screen.getByRole("button", { name: /save workshop 1st iclr workshop on time series/i }));
+    expect(screen.getByRole("button", { name: "Export ICS" })).toBeEnabled();
+    expect(window.localStorage.getItem(workshopBookmarkStorageKey())).toContain("w1");
+
+    await user.click(screen.getByLabelText("Saved workshops only"));
+    expect(window.location.search).toContain("wsaved=1");
   });
 });
