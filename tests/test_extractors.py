@@ -214,9 +214,12 @@ class EndToEndTests(unittest.TestCase):
                 if row["title"] == "Safety Instincts: LLMs Learn to Trust Their Internal Compass for Self-Defense"
             )
             self.assertEqual("Poster Session 7 Hall A", poster_row["session_title"])
+            self.assertEqual("10008720", poster_row["paper_id"])
             self.assertEqual("Oral Session 1A Example Track", oral_row["session_title"])
+            self.assertEqual("10008721", oral_row["paper_id"])
             self.assertEqual("10:00", oral_row["session_start"])
             self.assertEqual("Auditorium", oral_row["room"])
+            self.assertNotEqual(poster_row["paper_id"], oral_row["paper_id"])
             self.assertIn(missing_row["status"], {"missing_schedule", "missing_detail", "partial"})
             self.assertIn("schedule", missing_row["notes"])
 

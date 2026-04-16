@@ -4,6 +4,7 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from collections import defaultdict
+import re
 
 from .detail_parser import parse_companion_presentation, parse_detail_page
 from .http import HttpClient
@@ -17,6 +18,7 @@ from .write_outputs import build_summary, ensure_output_dir, write_csv, write_js
 CALENDAR_URL = "https://iclr.cc/virtual/2026/calendar"
 ORAL_EVENTS_URL = "https://iclr.cc/virtual/2026/events/oral"
 DETAIL_WORKERS = 8
+DETAIL_ID_RE = re.compile(r"/(?:oral|poster)/(\d+)(?:[/?#].*)?$")
 
 
 def parse_args() -> argparse.Namespace:
@@ -222,6 +224,10 @@ def _build_oral_rows(
         poster_record.schedule_source = "detail_page" if poster_record.session_date else poster_record.schedule_source
 
         oral_record = PaperRecord.from_dict(poster_record.to_dict())
+        oral_record.paper_id = _derive_oral_record_id(
+            oral_detail_url=event.detail_url,
+            fallback_poster_id=poster_record.paper_id,
+        )
         oral_record.paper_url = event.detail_url or oral_record.paper_url
         oral_record.source_list_url = ORAL_EVENTS_URL
         oral_record.source_detail_url = event.detail_url or oral_record.source_detail_url
@@ -236,6 +242,13 @@ def _build_oral_rows(
         oral_rows.append(oral_record)
 
     return oral_rows
+
+
+def _derive_oral_record_id(oral_detail_url: str, fallback_poster_id: str) -> str:
+    match = DETAIL_ID_RE.search(oral_detail_url or "")
+    if match:
+        return match.group(1)
+    return f"{fallback_poster_id}-oral"
 
 
 def main() -> None:
