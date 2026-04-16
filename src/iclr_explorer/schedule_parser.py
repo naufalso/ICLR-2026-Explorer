@@ -4,8 +4,8 @@ from collections import defaultdict
 from datetime import datetime
 import re
 
-from .models import CalendarEvent, PaperRecord
-from .parser_utils import normalize_title, parse_tokens
+from .models import CalendarEvent, ListedEvent, PaperRecord
+from .parser_utils import absolute_url, normalize_title, parse_tokens
 
 
 DAY_HEADER_RE = re.compile(r"^(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{1,2})\s+([A-Z]{3})$")
@@ -22,6 +22,9 @@ DETAIL_TIME_RE = re.compile(
     r"(\d{1,2}:\d{2}\s+[AP]M)\s+[–-]\s+(\d{1,2}:\d{2}\s+[AP]M)(?:\s+[A-Z]{2,4})?$"
 )
 DETAIL_EVENT_TYPES = {"Poster", "Oral", "Workshop", "Spotlight"}
+LISTING_TIME_RE = re.compile(
+    r"^([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{1,2}:\d{2}\s+[AP]M)\s+-\s+(\d{1,2}:\d{2}\s+[AP]M)$"
+)
 MONTHS = {
     "JAN": 1,
     "FEB": 2,
@@ -72,6 +75,53 @@ def _normalize_clock(value: str) -> str:
         except ValueError:
             continue
     return value
+
+
+def parse_listed_events(html: str, expected_session_type: str, detail_path_fragment: str) -> list[ListedEvent]:
+    tokens = parse_tokens(html)
+    events: list[ListedEvent] = []
+
+    index = 0
+    while index <= len(tokens) - 5:
+        current = tokens[index]
+        title_token = tokens[index + 1]
+        if current.text != expected_session_type or detail_path_fragment not in title_token.href:
+            index += 1
+            continue
+
+        schedule = _parse_listing_time(tokens[index + 3].text)
+        if not schedule:
+            index += 1
+            continue
+
+        events.append(
+            ListedEvent(
+                title=title_token.text,
+                authors=tokens[index + 2].text,
+                detail_url=absolute_url(title_token.href),
+                session_type=expected_session_type,
+                session_date=schedule["session_date"],
+                session_start=schedule["session_start"],
+                session_end=schedule["session_end"],
+                room=tokens[index + 4].text,
+            )
+        )
+        index += 5
+
+    return events
+
+
+def _parse_listing_time(text: str) -> dict[str, str]:
+    match = LISTING_TIME_RE.match(text)
+    if not match:
+        return {}
+    month, day, start, end = match.groups()
+    dt = datetime(2026, MONTHS[month.upper()], int(day))
+    return {
+        "session_date": dt.strftime("%Y-%m-%d"),
+        "session_start": _normalize_clock(start),
+        "session_end": _normalize_clock(end),
+    }
 
 
 def parse_calendar_events(html: str) -> list[CalendarEvent]:

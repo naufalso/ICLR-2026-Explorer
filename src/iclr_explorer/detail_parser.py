@@ -97,6 +97,23 @@ def parse_detail_page(html: str, record: PaperRecord) -> PaperRecord:
     return record
 
 
+def parse_companion_presentation(html: str) -> dict[str, str]:
+    tokens = parse_tokens(html)
+    for index in range(len(tokens) - 2):
+        candidate_type = tokens[index].text
+        if candidate_type not in {"Poster", "Oral"}:
+            continue
+        if tokens[index + 1].text != "presentation:":
+            continue
+        session_token = tokens[index + 2]
+        return {
+            "session_type": candidate_type,
+            "session_title": session_token.text,
+            "detail_url": absolute_url(tokens[index].href),
+        }
+    return {}
+
+
 def _parse_keywords_metadata(html: str, record: PaperRecord) -> None:
     match = KEYWORDS_RE.search(html)
     if not match:

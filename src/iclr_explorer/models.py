@@ -99,3 +99,16 @@ class CalendarEvent:
     session_end: str = ""
     room: str = ""
     paper_titles: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ListedEvent:
+    title: str = ""
+    authors: str = ""
+    detail_url: str = ""
+    session_type: str = ""
+    session_title: str = ""
+    session_date: str = ""
+    session_start: str = ""
+    session_end: str = ""
+    room: str = ""
