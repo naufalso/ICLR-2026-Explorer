@@ -121,7 +121,8 @@ export function App() {
           if (workshopsResponse.ok) {
             nextWorkshopsPayload = (await workshopsResponse.json()) as WorkshopsPayload;
           }
-        } catch {
+        } catch (workshopsLoadError) {
+          console.warn("Failed to load workshops data; continuing with papers-only mode.", workshopsLoadError);
           nextWorkshopsPayload = EMPTY_WORKSHOPS_PAYLOAD;
         }
         if (!cancelled) {

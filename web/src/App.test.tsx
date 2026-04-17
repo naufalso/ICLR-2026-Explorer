@@ -229,6 +229,7 @@ describe("ExplorerApp", () => {
 
 describe("App", () => {
   it("loads papers when workshops fetch fails", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -242,5 +243,6 @@ describe("App", () => {
 
     expect(await screen.findByRole("tab", { name: "Explore" })).toBeInTheDocument();
     expect(screen.queryByText("Data Load Failed")).not.toBeInTheDocument();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });
