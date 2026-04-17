@@ -1,10 +1,10 @@
 {
   "total_papers_discovered": 5472,
-  "total_papers_enriched": 5472,
-  "total_papers_written": 5472,
-  "total_papers_with_abstracts": 5471,
-  "total_papers_with_schedule_metadata": 5421,
+  "total_papers_enriched": 5696,
+  "total_papers_written": 5696,
+  "total_papers_with_abstracts": 5695,
+  "total_papers_with_schedule_metadata": 5645,
   "total_papers_missing_required_fields": 0,
   "duplicate_url_count": 0,
-  "duplicate_title_count": 0
+  "duplicate_title_count": 224
 }

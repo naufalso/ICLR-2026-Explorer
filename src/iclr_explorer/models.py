@@ -161,3 +161,14 @@ class WorkshopRecord:
     def from_dict(cls, value: dict[str, str]) -> "WorkshopRecord":
         kwargs = {column: value.get(column, "") for column in WORKSHOP_CSV_COLUMNS}
         return cls(**kwargs)
+  
+class ListedEvent:
+    title: str = ""
+    authors: str = ""
+    detail_url: str = ""
+    session_type: str = ""
+    session_title: str = ""
+    session_date: str = ""
+    session_start: str = ""
+    session_end: str = ""
+    room: str = ""

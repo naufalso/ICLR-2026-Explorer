@@ -1,18 +1,18 @@
 # ICLR 2026 Explorer
 
-ICLR 2026 Explorer is a small data pipeline plus a frontend explorer for browsing conference content. Poster papers and workshop events are both supported now, with workshops intentionally kept in a separate explorer lane instead of being merged into the paper workflow.
+ICLR 2026 Explorer is a small data pipeline plus a frontend explorer for browsing conference content. Poster and oral paper extraction, normalization, schedule enrichment, and a searchable web UI are in place.
 
-The repository is still in progress. Poster paper support is complete, workshop support is now in place, and oral sessions, invited talks, and a broader cross-program calendar view are still planned next.
+The repository is still in progress. Poster and oral paper plus workshop support are complete for the current phase, while invited talks, and a dedicated calendar view are planned next.
 
 ## Current Status
 
 - [x] Poster paper extraction from the ICLR virtual site
+- [x] Oral presentation coverage with paired oral/poster paper rows
 - [x] Canonical CSV and JSON artifacts under `data/iclr2026/`
 - [x] Frontend-ready payload generation for the web app
 - [x] React explorer with search, filters, bookmarks, agenda view, and CSV/ICS export
 - [x] Dedicated workshop extractor and separate workshop explorer
 - [x] GitHub Pages deployment workflow for the frontend
-- [ ] Oral sessions
 - [ ] Invited talks
 - [ ] Calendar view
 
@@ -31,10 +31,10 @@ The repository is still in progress. Poster paper support is complete, workshop 
 
 ### Data pipeline
 
-The Python package in [`src/iclr_explorer`](src/iclr_explorer) currently handles poster-paper data and workshop event data:
+The Python package in [`src/iclr_explorer`](src/iclr_explorer) currently handles poster-oral paper data and workshop event data:
 
 - `extract_papers.py`
-  Downloads the ICLR paper index, fetches poster detail pages, merges topic metadata, applies schedule information from detail pages and the conference calendar, then writes canonical artifacts.
+  Downloads the ICLR paper index, fetches poster detail pages, derives linked oral presentations, applies schedule information from detail pages, the oral events page, and the conference calendar, then writes canonical artifacts.
 - `build_web_data.py`
   Converts the canonical CSV into a frontend-friendly JSON payload consumed by the web app.
 - `extract_workshops.py`
@@ -186,7 +186,7 @@ The canonical paper records currently include fields such as:
 - paper identity and URLs
 - title and authors
 - topic tags
-- poster session title, type, date, and time
+- session title, type, date, and time
 - room
 - abstract
 - project, PDF, video, poster, and code links when available
@@ -226,7 +226,7 @@ Near-term work is intentionally incremental:
 
 - [x] Keep poster-paper extraction and browsing stable
 - [x] Add workshop coverage as a separate explorer
-- [ ] Add oral-session coverage
+- [x] Add oral-session coverage
 - [ ] Add invited-talk coverage
 - [ ] Add calendar view
 - [ ] Unify all conference content into a broader schedule explorer
@@ -234,5 +234,6 @@ Near-term work is intentionally incremental:
 ## Notes
 
 - Papers and workshops are intentionally separate in the UI right now; workshops have their own saved state and their own CSV/ICS export path.
+- Oral-accepted papers currently appear as two rows in the canonical dataset and UI: one `Poster` row and one `Oral` row.
 - Calendar exports use the conference schedule fields present in the generated data.
 - If `web/public/data/papers.json` or `web/public/data/workshops.json` is missing or stale, rebuild them before running the frontend.
