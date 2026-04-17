@@ -2,7 +2,7 @@
 
 ICLR 2026 Explorer is a small data pipeline plus a frontend explorer for browsing conference content. Poster and oral paper extraction, normalization, schedule enrichment, and a searchable web UI are in place.
 
-The repository is still in progress. Poster and oral paper plus workshop support are complete for the current phase, while invited talks, and a dedicated calendar view are planned next.
+The repository is still in progress. Poster and oral paper plus workshop support are complete for the current phase, while invited talks and a dedicated calendar view are planned next.
 
 ## Current Status
 

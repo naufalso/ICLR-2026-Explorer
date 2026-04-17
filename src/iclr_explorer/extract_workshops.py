@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 from .http import HttpClient
-from .models import WorkshopRecord
+from .models import WORKSHOP_CSV_COLUMNS, WorkshopRecord
 from .workshop_parser import WORKSHOP_LIST_URL, extract_workshop_records, parse_workshop_detail_page
 from .write_outputs import ensure_output_dir, write_csv, write_json
 
@@ -80,7 +80,7 @@ def run(output_dir: str, refresh: bool = False, limit: int = 0) -> dict[str, obj
 
     write_json(raw_index_payload, output_path / "workshops_raw_index.json")
     write_json(enriched_payload, output_path / "workshops_enriched.json")
-    write_csv(records, output_path / "workshops.csv")
+    write_csv(records, output_path / "workshops.csv", fieldnames=WORKSHOP_CSV_COLUMNS)
     write_json(summary, output_path / "workshops_extraction_summary.json")
     return summary
 

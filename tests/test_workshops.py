@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from iclr_explorer.build_workshop_web_data import run as build_workshop_web_data
 from iclr_explorer.extract_workshops import run as extract_workshops
 from iclr_explorer.models import WORKSHOP_CSV_COLUMNS, WorkshopRecord
+from iclr_explorer.write_outputs import write_csv
 from iclr_explorer.workshop_parser import extract_workshop_records, parse_workshop_detail_page
 
 
@@ -53,6 +54,18 @@ class WorkshopParserTests(unittest.TestCase):
 
 
 class WorkshopEndToEndTests(unittest.TestCase):
+    def test_write_csv_empty_workshops_uses_workshop_header(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_csv = Path(tmpdir) / "workshops.csv"
+            write_csv([], output_csv, fieldnames=WORKSHOP_CSV_COLUMNS)
+
+            with output_csv.open(encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                rows = list(reader)
+
+            self.assertEqual(WORKSHOP_CSV_COLUMNS, reader.fieldnames)
+            self.assertEqual([], rows)
+
     def test_extract_workshops_writes_outputs(self) -> None:
         list_html = fixture("workshops_list.html")
         detail_html = fixture("detail_workshop.html")

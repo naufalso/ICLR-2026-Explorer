@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ExplorerApp } from "./App";
+import { App, ExplorerApp } from "./App";
 import { bookmarkStorageKey, workshopBookmarkStorageKey } from "./lib/storage";
 import { emptyWorkshopsPayload, fixturePayload, workshopFixturePayload } from "./test/fixtures";
 
@@ -46,6 +46,7 @@ vi.mock("react-window", () => ({
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("ExplorerApp", () => {
@@ -223,5 +224,23 @@ describe("ExplorerApp", () => {
 
     await user.click(screen.getByLabelText("Saved workshops only"));
     expect(window.location.search).toContain("wsaved=1");
+  });
+});
+
+describe("App", () => {
+  it("loads papers when workshops fetch fails", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => fixturePayload,
+      })
+      .mockRejectedValueOnce(new Error("workshops request failed"));
+
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    expect(await screen.findByRole("tab", { name: "Explore" })).toBeInTheDocument();
+    expect(screen.queryByText("Data Load Failed")).not.toBeInTheDocument();
   });
 });

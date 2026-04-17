@@ -108,19 +108,22 @@ export function App() {
 
     async function loadData() {
       try {
-        const [papersResponse, workshopsResponse] = await Promise.all([
-          fetch(DATA_URL),
-          fetch(WORKSHOPS_DATA_URL),
-        ]);
+        const papersResponse = await fetch(DATA_URL);
 
         if (!papersResponse.ok) {
           throw new Error(`Failed to load papers.json (${papersResponse.status})`);
         }
 
         const papersPayload = (await papersResponse.json()) as PapersPayload;
-        const nextWorkshopsPayload = workshopsResponse.ok
-          ? ((await workshopsResponse.json()) as WorkshopsPayload)
-          : EMPTY_WORKSHOPS_PAYLOAD;
+        let nextWorkshopsPayload = EMPTY_WORKSHOPS_PAYLOAD;
+        try {
+          const workshopsResponse = await fetch(WORKSHOPS_DATA_URL);
+          if (workshopsResponse.ok) {
+            nextWorkshopsPayload = (await workshopsResponse.json()) as WorkshopsPayload;
+          }
+        } catch {
+          nextWorkshopsPayload = EMPTY_WORKSHOPS_PAYLOAD;
+        }
         if (!cancelled) {
           setData(papersPayload);
           setWorkshopsData(nextWorkshopsPayload);
