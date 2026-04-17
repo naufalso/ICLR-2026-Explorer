@@ -1,4 +1,4 @@
-import type { PapersPayload } from "../types";
+import type { PapersPayload, WorkshopsPayload } from "../types";
 
 export const fixturePayload: PapersPayload = {
   generated_at: "2026-04-15T11:56:08+00:00",
@@ -146,4 +146,91 @@ export const fixturePayload: PapersPayload = {
       search_blob: "schedule missing paper jane doe trustworthy machine learning no schedule yet."
     }
   ]
+};
+
+export const emptyWorkshopsPayload: WorkshopsPayload = {
+  generated_at: "",
+  source_csv: "data/iclr2026/workshops.csv",
+  columns: [],
+  total_workshops: 0,
+  session_dates: [],
+  rooms: [],
+  unresolved_schedule_count: 0,
+  workshops: [],
+};
+
+export const workshopFixturePayload: WorkshopsPayload = {
+  generated_at: "2026-04-16T08:00:00+00:00",
+  source_csv: "data/iclr2026/workshops.csv",
+  columns: [
+    "workshop_id",
+    "workshop_url",
+    "title",
+    "organizers",
+    "event_type",
+    "session_date",
+    "session_start",
+    "session_end",
+    "timezone",
+    "room",
+    "summary",
+    "project_page",
+    "source_list_url",
+    "source_detail_url",
+    "scraped_at",
+    "status",
+    "notes",
+  ],
+  total_workshops: 2,
+  session_dates: ["2026-04-26", "2026-04-27"],
+  rooms: ["205", "Ballroom A"],
+  unresolved_schedule_count: 0,
+  workshops: [
+    {
+      workshop_id: "w1",
+      workshop_url: "https://example.test/workshop/w1",
+      title: "1st ICLR Workshop on Time Series in the Age of Large Models",
+      organizers: "Arjun Ashok ⋅ Abdul Fatir Ansari ⋅ Elizabeth Fons",
+      event_type: "Workshop",
+      session_date: "2026-04-26",
+      session_start: "05:00",
+      session_end: "13:00",
+      timezone: "PDT",
+      room: "205",
+      summary: "This workshop covers time series foundation models and agentic forecasting systems.",
+      project_page: "https://example.test/workshop/w1/project",
+      source_list_url: "https://example.test/events/workshop",
+      source_detail_url: "https://example.test/workshop/w1",
+      scraped_at: "2026-04-16T08:00:00+00:00",
+      status: "ok",
+      notes: "",
+      organizers_list: ["Arjun Ashok", "Abdul Fatir Ansari", "Elizabeth Fons"],
+      has_schedule: true,
+      search_blob:
+        "1st iclr workshop on time series in the age of large models arjun ashok abdul fatir ansari elizabeth fons this workshop covers time series foundation models and agentic forecasting systems. 205 workshop",
+    },
+    {
+      workshop_id: "w2",
+      workshop_url: "https://example.test/workshop/w2",
+      title: "ICLR 2026 Workshop on AI with Recursive Self-Improvement",
+      organizers: "Mingchen Zhuge ⋅ AILING ZENG",
+      event_type: "Workshop",
+      session_date: "2026-04-27",
+      session_start: "05:00",
+      session_end: "13:00",
+      timezone: "PDT",
+      room: "Ballroom A",
+      summary: "This workshop focuses on reliable recursive self-improvement loops for AI systems.",
+      project_page: "",
+      source_list_url: "https://example.test/events/workshop",
+      source_detail_url: "https://example.test/workshop/w2",
+      scraped_at: "2026-04-16T08:00:00+00:00",
+      status: "ok",
+      notes: "",
+      organizers_list: ["Mingchen Zhuge", "AILING ZENG"],
+      has_schedule: true,
+      search_blob:
+        "iclr 2026 workshop on ai with recursive self-improvement mingchen zhuge ailing zeng this workshop focuses on reliable recursive self-improvement loops for ai systems. ballroom a workshop",
+    },
+  ],
 };

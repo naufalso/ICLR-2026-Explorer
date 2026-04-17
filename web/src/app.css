@@ -258,10 +258,10 @@ code {
 }
 
 .command-bar {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
-  align-items: center;
+  align-items: end;
 }
 
 .toolbar-tabs {
@@ -343,6 +343,7 @@ select:focus-visible,
 }
 
 .search-shell {
+  flex: 1 1 320px;
   min-width: 0;
   display: grid;
   gap: 6px;
@@ -603,6 +604,16 @@ select:focus-visible,
   color: var(--muted);
   margin: 0;
   line-height: 1.55;
+}
+
+.paper-summary {
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .paper-badge,
@@ -915,7 +926,8 @@ select:focus-visible,
   }
 
   .command-bar {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .brand-lockup {

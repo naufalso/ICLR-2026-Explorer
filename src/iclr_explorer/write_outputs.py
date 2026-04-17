@@ -4,7 +4,7 @@ import csv
 import json
 from pathlib import Path
 
-from .models import CSV_COLUMNS, PaperRecord
+from .models import CSV_COLUMNS, WORKSHOP_CSV_COLUMNS, PaperRecord, WorkshopRecord
 
 
 def ensure_output_dir(output_dir: str | Path) -> Path:
@@ -13,10 +13,22 @@ def ensure_output_dir(output_dir: str | Path) -> Path:
     return path
 
 
-def write_csv(records: list[PaperRecord], output_path: str | Path) -> None:
+def write_csv(
+    records: list[PaperRecord] | list[WorkshopRecord],
+    output_path: str | Path,
+    fieldnames: list[str] | tuple[str, ...] | None = None,
+) -> None:
     path = Path(output_path)
+    if fieldnames is None:
+        if not records:
+            msg = "fieldnames must be provided when writing an empty CSV"
+            raise ValueError(msg)
+        if isinstance(records[0], WorkshopRecord):
+            fieldnames = WORKSHOP_CSV_COLUMNS
+        else:
+            fieldnames = CSV_COLUMNS
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for record in records:
             writer.writerow(record.to_dict())

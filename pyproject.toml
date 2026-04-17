@@ -1,7 +1,7 @@
 [project]
 name = "iclr-explorer"
 version = "0.1.0"
-description = "ICLR 2026 papers extractor"
+description = "ICLR 2026 paper and workshop explorer"
 requires-python = ">=3.11"
 
 [build-system]

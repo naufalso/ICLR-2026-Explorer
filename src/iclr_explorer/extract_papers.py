@@ -9,7 +9,7 @@ import re
 from .detail_parser import parse_companion_presentation, parse_detail_page
 from .http import HttpClient
 from .index_parser import PAPER_MINI_URL, extract_index_records
-from .models import PaperRecord
+from .models import CSV_COLUMNS, PaperRecord
 from .parser_utils import normalize_title
 from .schedule_parser import apply_calendar_schedule, apply_detail_schedule, parse_listed_events
 from .write_outputs import build_summary, ensure_output_dir, write_csv, write_json
@@ -143,7 +143,7 @@ def run(output_dir: str, refresh: bool = False, limit: int = 0) -> dict[str, obj
 
     write_json(raw_index_payload, output_path / "papers_raw_index.json")
     write_json(enriched_payload, output_path / "papers_enriched.json")
-    write_csv(merged_records, output_path / "papers.csv")
+    write_csv(merged_records, output_path / "papers.csv", fieldnames=CSV_COLUMNS)
     write_json(summary, output_path / "extraction_summary.json")
     return summary
 

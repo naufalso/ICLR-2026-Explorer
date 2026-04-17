@@ -1,4 +1,4 @@
-import type { AgendaGroup, Filters, Paper } from "../types";
+import type { AgendaGroup, Filters, Paper, Workshop, WorkshopFilters } from "../types";
 
 export function filterPapers(papers: Paper[], filters: Filters, bookmarks: Set<string>): Paper[] {
   const queryTerms = filters.query
@@ -96,4 +96,67 @@ export function formatScheduleLabel(paper: Pick<Paper, "session_date" | "session
   const dateLabel = formatDateLabel(paper.session_date);
   const timeLabel = paper.session_start && paper.session_end ? `${paper.session_start}-${paper.session_end}` : "Time TBD";
   return paper.room ? `${dateLabel} · ${timeLabel} · ${paper.room}` : `${dateLabel} · ${timeLabel}`;
+}
+
+export function filterWorkshops(
+  workshops: Workshop[],
+  filters: WorkshopFilters,
+  bookmarks: Set<string>,
+): Workshop[] {
+  const queryTerms = filters.query
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return [...workshops]
+    .filter((workshop) => {
+      if (filters.savedOnly && !bookmarks.has(workshop.workshop_id)) {
+        return false;
+      }
+      if (filters.scheduledOnly && !workshop.has_schedule) {
+        return false;
+      }
+      if (filters.selectedDate && workshop.session_date !== filters.selectedDate) {
+        return false;
+      }
+      if (filters.selectedRoom && workshop.room !== filters.selectedRoom) {
+        return false;
+      }
+      if (queryTerms.length > 0) {
+        return queryTerms.every((term) => workshop.search_blob.includes(term));
+      }
+      return true;
+    })
+    .sort(compareWorkshops);
+}
+
+export function compareWorkshops(left: Workshop, right: Workshop): number {
+  const leftDate = left.session_date || "9999-12-31";
+  const rightDate = right.session_date || "9999-12-31";
+  if (leftDate !== rightDate) {
+    return leftDate.localeCompare(rightDate);
+  }
+
+  const leftStart = left.session_start || "99:99";
+  const rightStart = right.session_start || "99:99";
+  if (leftStart !== rightStart) {
+    return leftStart.localeCompare(rightStart);
+  }
+
+  return left.title.localeCompare(right.title, undefined, { sensitivity: "base" });
+}
+
+export function formatWorkshopScheduleLabel(
+  workshop: Pick<Workshop, "session_date" | "session_start" | "session_end" | "room" | "timezone">,
+): string {
+  if (!workshop.session_date) {
+    return "Schedule pending";
+  }
+
+  const dateLabel = formatDateLabel(workshop.session_date);
+  const timeLabel =
+    workshop.session_start && workshop.session_end ? `${workshop.session_start}-${workshop.session_end}` : "Time TBD";
+  const locationLabel = workshop.room ? `${timeLabel} · ${workshop.room}` : timeLabel;
+  return workshop.timezone ? `${dateLabel} · ${locationLabel} · ${workshop.timezone}` : `${dateLabel} · ${locationLabel}`;
 }

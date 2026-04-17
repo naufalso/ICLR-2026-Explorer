@@ -29,6 +29,26 @@ CSV_COLUMNS = [
     "notes",
 ]
 
+WORKSHOP_CSV_COLUMNS = [
+    "workshop_id",
+    "workshop_url",
+    "title",
+    "organizers",
+    "event_type",
+    "session_date",
+    "session_start",
+    "session_end",
+    "timezone",
+    "room",
+    "summary",
+    "project_page",
+    "source_list_url",
+    "source_detail_url",
+    "scraped_at",
+    "status",
+    "notes",
+]
+
 
 @dataclass
 class PaperRecord:
@@ -102,6 +122,46 @@ class CalendarEvent:
 
 
 @dataclass
+class WorkshopRecord:
+    workshop_id: str = ""
+    workshop_url: str = ""
+    title: str = ""
+    organizers: str = ""
+    event_type: str = ""
+    session_date: str = ""
+    session_start: str = ""
+    session_end: str = ""
+    timezone: str = ""
+    room: str = ""
+    summary: str = ""
+    project_page: str = ""
+    source_list_url: str = ""
+    source_detail_url: str = ""
+    scraped_at: str = ""
+    status: str = ""
+    notes: str = ""
+
+    def add_note(self, message: str) -> None:
+        cleaned = message.strip()
+        if not cleaned:
+            return
+        if self.notes:
+            existing = {note.strip() for note in self.notes.split(";")}
+            if cleaned in existing:
+                return
+            self.notes = f"{self.notes}; {cleaned}"
+        else:
+            self.notes = cleaned
+
+    def to_dict(self) -> dict[str, str]:
+        data = asdict(self)
+        return {column: (data.get(column) or "") for column in WORKSHOP_CSV_COLUMNS}
+
+    @classmethod
+    def from_dict(cls, value: dict[str, str]) -> "WorkshopRecord":
+        kwargs = {column: value.get(column, "") for column in WORKSHOP_CSV_COLUMNS}
+        return cls(**kwargs)
+  
 class ListedEvent:
     title: str = ""
     authors: str = ""
