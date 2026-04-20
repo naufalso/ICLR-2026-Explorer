@@ -12,6 +12,7 @@ vi.mock("react-window", () => ({
     className,
     rowComponent: Row,
     rowCount,
+    rowHeight,
     rowProps,
     style,
   }: {
@@ -22,26 +23,42 @@ vi.mock("react-window", () => ({
       style: Record<string, unknown>;
     }) => ReactNode;
     rowCount: number;
+    rowHeight:
+      | number
+      | {
+          getAverageRowHeight: () => number;
+        };
     rowProps: Record<string, unknown>;
     style?: Record<string, unknown>;
-  }) => (
-    <div className={className} style={style}>
-      {Array.from({ length: rowCount }).map((_, index) => (
-        <div key={index}>
-          {Row({
-            ...rowProps,
-            ariaAttributes: {
-              "aria-posinset": index + 1,
-              "aria-setsize": rowCount,
-              role: "listitem",
-            },
-            index,
-            style: { height: 238, top: index * 238 },
-          })}
+    }) => {
+      const resolvedRowHeight =
+        typeof rowHeight === "number" ? rowHeight : rowHeight.getAverageRowHeight();
+
+      return (
+        <div className={className} style={style}>
+          {Array.from({ length: rowCount }).map((_, index) => (
+            <div key={index}>
+              {Row({
+                ...rowProps,
+                ariaAttributes: {
+                  "aria-posinset": index + 1,
+                  "aria-setsize": rowCount,
+                  role: "listitem",
+                },
+                index,
+                style: { height: resolvedRowHeight, top: index * resolvedRowHeight },
+              })}
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
-  ),
+      );
+    },
+  useDynamicRowHeight: ({ defaultRowHeight }: { defaultRowHeight: number }) => ({
+    getAverageRowHeight: () => defaultRowHeight,
+    getRowHeight: () => defaultRowHeight,
+    setRowHeight: () => {},
+    observeRowElements: () => () => {},
+  }),
 }));
 
 afterEach(() => {

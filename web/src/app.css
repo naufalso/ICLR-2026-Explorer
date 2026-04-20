@@ -598,6 +598,11 @@ select:focus-visible,
   text-wrap: balance;
 }
 
+.paper-card-topline,
+.agenda-card-topline {
+  flex-wrap: wrap;
+}
+
 .paper-authors,
 .detail-authors,
 .agenda-card p {
@@ -726,6 +731,7 @@ select:focus-visible,
 }
 
 .footer-brand {
+  min-width: 0;
   display: grid;
   gap: 8px;
 }
@@ -743,6 +749,7 @@ select:focus-visible,
 }
 
 .footer-actions {
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -949,9 +956,13 @@ select:focus-visible,
   .header-meta,
   .results-toolbar,
   .agenda-toolbar,
-  .filter-row,
-  .app-footer {
+  .filter-row {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-footer {
+    grid-template-columns: 1fr;
     align-items: stretch;
   }
 

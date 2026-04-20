@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { List, type RowComponentProps } from "react-window";
+import { List, useDynamicRowHeight, type RowComponentProps } from "react-window";
 
 import { buildCsv, buildIcs, buildWorkshopIcs, downloadTextFile } from "./lib/export";
 import {
@@ -393,8 +393,14 @@ export function ExplorerApp({
       ),
     [isMobile, viewportHeight],
   );
-  const resultsItemSize =
-    contentView === "workshops" ? (isMobile ? 292 : 276) : isMobile ? 252 : 238;
+  const paperRowHeights = useDynamicRowHeight({
+    defaultRowHeight: isMobile ? 286 : 238,
+    key: `papers-${isMobile ? "mobile" : "desktop"}`,
+  });
+  const workshopRowHeights = useDynamicRowHeight({
+    defaultRowHeight: isMobile ? 328 : 276,
+    key: `workshops-${isMobile ? "mobile" : "desktop"}`,
+  });
   const paperListRowData = useMemo<PaperListRowData>(
     () => ({
       bookmarks,
@@ -952,7 +958,7 @@ export function ExplorerApp({
                 className="paper-vlist"
                 rowComponent={WorkshopListRow}
                 rowCount={filteredWorkshops.length}
-                rowHeight={resultsItemSize}
+                rowHeight={workshopRowHeights}
                 rowProps={workshopListRowData}
                 overscanCount={6}
                 style={{ height: resultsListHeight, width: "100%" }}
@@ -1123,7 +1129,7 @@ export function ExplorerApp({
                 className="paper-vlist"
                 rowComponent={PaperListRow}
                 rowCount={filteredPapers.length}
-                rowHeight={resultsItemSize}
+                rowHeight={paperRowHeights}
                 rowProps={paperListRowData}
                 overscanCount={6}
                 style={{ height: resultsListHeight, width: "100%" }}
@@ -1395,7 +1401,8 @@ function PaperListRow({
       {...ariaAttributes}
       style={{
         ...style,
-        height: Number(style.height) - 14,
+        height: "auto",
+        paddingBottom: 14,
         width: "100%",
       }}
     >
@@ -1405,7 +1412,6 @@ function PaperListRow({
         isSelected={selectedPaperId === paper.paper_id}
         onOpen={() => onOpen(paper.paper_id)}
         onToggleBookmark={() => onToggleBookmark(paper.paper_id)}
-        style={{ height: "100%" }}
       />
     </div>
   );
@@ -1476,7 +1482,8 @@ function WorkshopListRow({
       {...ariaAttributes}
       style={{
         ...style,
-        height: Number(style.height) - 14,
+        height: "auto",
+        paddingBottom: 14,
         width: "100%",
       }}
     >
@@ -1486,7 +1493,6 @@ function WorkshopListRow({
         isSelected={selectedWorkshopId === workshop.workshop_id}
         onOpen={() => onOpen(workshop.workshop_id)}
         onToggleBookmark={() => onToggleBookmark(workshop.workshop_id)}
-        style={{ height: "100%" }}
       />
     </div>
   );
